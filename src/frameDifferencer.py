@@ -13,7 +13,8 @@ spacings: a numpy array containing the different spacings to use
 RETURN: list(array(frame order, y position, x position))
 """
 def frameDifferencer(videoFrames, spacings):
-    #TODO: actual differencing
-    #The dummy return is a list containing the original frames
-    dummyReturn = [videoFrames];
-    return dummyReturn
+    #TODO: try doing this without any loops, just numpyness
+    differences = []
+    for i in spacings:
+        differences.append(videoFrames[i:videoFrames.shape[0],:,:] - videoFrames[0:videoFrames.shape[0] - i,:,:])
+    return differences
