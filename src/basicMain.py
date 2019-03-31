@@ -15,9 +15,10 @@ import calculateQCurves as cQC
 import calculateCorrelation as cC
 
 #starting with the simplest case, consecutive frame differences
-spacings = np.array((1,10))
+spacings = np.array((1,))
 videoInput = rV.readVideo(sys.argv[1])
 frameDifferences = fD.frameDifferencer(videoInput, spacings)
+videoInput = 0
 fourierSections = tDF.twoDFourier(frameDifferences)
 qCurves = cQC.calculateQCurves(fourierSections)
 correlations = cC.calculateCorrelation(qCurves)

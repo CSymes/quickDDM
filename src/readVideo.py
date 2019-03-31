@@ -20,7 +20,7 @@ def readVideo(file):
     numFrames = int(videoFile.get(cv2.CAP_PROP_FRAME_COUNT))
     pxHeight = int(videoFile.get(cv2.CAP_PROP_FRAME_HEIGHT))
     pxWidth = int(videoFile.get(cv2.CAP_PROP_FRAME_WIDTH))
-    videoArray = np.empty((numFrames,pxHeight,pxWidth),np.float32)
+    videoArray = np.empty((numFrames,pxHeight,pxWidth),np.uint8)
     frameBuffer = np.empty((pxHeight, pxWidth))
     framesRead = 0
     readStatus = True
