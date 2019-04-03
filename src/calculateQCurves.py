@@ -19,7 +19,7 @@ RETURN: a list of 1d intensity arrays, where the sequence of list elements maps
 to larger and larger time differences
 """
 def calculateQCurves(fourierDifferences):
-    absolutes = np.square(np.absolute(fourierDifferences))
+    absolutes = np.square(np.absolute(fourierDifferences))/(fourierDifferences[0].shape[1]*fourierDifferences[0].shape[2])
     averages = []
     i = 0
     while(i < len(absolutes)):
