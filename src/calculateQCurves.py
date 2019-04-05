@@ -10,7 +10,8 @@ each time step, then computes the real Q curve for each time difference
 
 
 import numpy as np
-
+#For comparing designs
+import time
 
 
 """
@@ -19,6 +20,7 @@ RETURN: a list of 1d intensity arrays, where the sequence of list elements maps
 to larger and larger time differences
 """
 def calculateQCurves(fourierDifferences):
+    start = time.time()
     absolutes = np.square(np.absolute(fourierDifferences))/(fourierDifferences[0].shape[1]*fourierDifferences[0].shape[2])
     averages = []
     i = 0
@@ -30,6 +32,7 @@ def calculateQCurves(fourierDifferences):
     #TODO: for the averaging in a circle, look at this:
     #Link: https://stackoverflow.com/questions/8979214/iterate-over-2d-array-in-an-expanding-circular-spiral
     absolutes = 0 #just finishing the cleanup, just in case
+    """
     #For now, it is just mimicing the provided MATLAB, which isn't ideal, but sue me.
     yRange = np.arange(-averages[0].shape[0]/2.0,averages[0].shape[0]/2.0, dtype = np.int32)
     xRange = np.arange(-averages[0].shape[1]/2.0,averages[0].shape[1]/2.0, dtype = np.int32)
@@ -50,4 +53,26 @@ def calculateQCurves(fourierDifferences):
             qCurves[i][r] = (np.mean(averages[i][pickGrid]))
             r += 1
         i += 1
+    """
+    
+    #This version is loading in the grid from a file, to see if that is faster
+    radiusGrid = np.loadtxt("../data/radiusGrid.txt", dtype=np.int32)
+    gridSize = radiusGrid.shape[0]
+    vidY,vidX = averages[0].shape
+    radiusGrid = radiusGrid[gridSize/2 - vidY/2:gridSize/2 + vidY/2,gridSize/2 - vidX/2:gridSize/2 + vidX/2]
+    qCurves = []
+    while(i < len(averages)):
+        r=0
+        qCurves.append(np.zeros(averages[i].shape[0]/2))
+        #only while we get a full circle
+        #TODO: try to rework this into numpy array format
+        while(r < averages[i].shape[0]/2):
+            pickGrid = radiusGrid == r
+            qCurves[i][r] = (np.mean(averages[i][pickGrid]))
+            r += 1
+        i += 1
+    
+    end = time.time()
+    print 'Time taken:'
+    print(end-start)
     return qCurves
