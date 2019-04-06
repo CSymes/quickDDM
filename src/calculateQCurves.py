@@ -61,7 +61,6 @@ def calculateQCurves(fourierDifferences):
     vidY,vidX = averages[0].shape
     radiusGrid = radiusGrid[gridSize/2 - vidY/2:gridSize/2 + vidY/2,gridSize/2 - vidX/2:gridSize/2 + vidX/2]
     qCurves = []
-    i = 0
     while(i < len(averages)):
         r=0
         qCurves.append(np.zeros(averages[i].shape[0]/2))
