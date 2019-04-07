@@ -16,12 +16,15 @@ import calculateQCurves as cQC
 import calculateCorrelation as cC
 
 #starting with the simplest case, consecutive frame differences
-spacings = np.array((2,))
+spacings = np.array((13,14,15))
+correlations = []
 videoInput = rV.readVideo(sys.argv[1])
-frameDifferences = fD.frameDifferencer(videoInput, spacings)
-fourierSections = tDF.twoDFourier(frameDifferences)
-qCurves = cQC.calculateQCurves(fourierSections)
-correlations = cC.calculateCorrelation(qCurves)
+for spacing in spacings:
+    frameDifferences = fD.frameDifferencer(videoInput, spacing)
+    fourierSections = tDF.twoDFourier(frameDifferences)
+    qCurve = cQC.calculateQCurves(fourierSections)
+    correlations.append(qCurve)
+correlations = cC.calculateCorrelation(correlations)
 if len(sys.argv) == 3:
     with open(sys.argv[2], "ab") as file:
-        np.savetxt(file, correlations, delimiter = ',')
+        np.savetxt(file, correlations, delimiter = ' ')
