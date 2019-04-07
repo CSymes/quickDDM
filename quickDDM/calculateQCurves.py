@@ -42,7 +42,7 @@ def calculateQCurves(fourierDifferences):
     #TODO: test with different input dimensions (particularly odd lengths)
     qCurves = []
     while(i < len(averages)):
-        qCurves.append(np.zeros(averages[i].shape[0]/2))
+        qCurves.append(np.zeros(averages[i].shape[0]//2))
         #only while we get a full circle
         #TODO: try to rework this into numpy array format
         while(r < averages[i].shape[0]/2):

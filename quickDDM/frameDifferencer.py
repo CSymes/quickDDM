@@ -2,7 +2,7 @@
 #frameDifferencer.py
 """
 Created on Tue Mar 26 15:11:06 2019
-Takes the differences between various frames, currently only between 
+Takes the differences between various frames, currently only between the first pair
 @author: Lionel
 """
 import numpy as np

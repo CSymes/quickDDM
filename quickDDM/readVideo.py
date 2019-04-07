@@ -17,6 +17,10 @@ RETURN: frames as (frame count, y position, x position)
 
 def readVideo(file):
     videoFile = cv2.VideoCapture(file)
+
+    if not videoFile.isOpened():
+        raise cv2.error("Malformed video file")
+
     numFrames = int(videoFile.get(cv2.CAP_PROP_FRAME_COUNT))
     pxHeight = int(videoFile.get(cv2.CAP_PROP_FRAME_HEIGHT))
     pxWidth = int(videoFile.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -27,9 +31,8 @@ def readVideo(file):
     while(framesRead < numFrames):
         #We only need one colour channel
         readStatus, frameBuffer = videoFile.read()
-        if  not readStatus:
-            print 'The video file has an error'
-            sys.exit
+        if not readStatus:
+            raise cv2.error('The video file has an error')
         videoArray[framesRead] = frameBuffer[:,:,0]
         framesRead += 1
     videoFile.release()
