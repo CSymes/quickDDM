@@ -15,10 +15,10 @@ from quickDDM.readVideo import readVideo
 class ReadVideoTestCases(unittest.TestCase):
     def testValidVideoOpens(self):
         # TODO maybe split readVideo into readVideo(IntoFrames) and read(Single)Frame?
-        readVideo('tests/short.avi') # single black frame
+        readVideo('tests/data/short.avi') # single black frame
 
     def testReadFramesAreCorrect(self):
-        frames = readVideo('tests/black.avi') # 5x frames of straight black
+        frames = readVideo('tests/data/black.avi') # 5x frames of straight black
         self.assertEqual(len(frames), 5)
 
         gold = [[[0 for i in range(1024)] for j in range(1024)] for k in range(5)]
@@ -30,7 +30,7 @@ class ReadVideoTestCases(unittest.TestCase):
         # Just take a lot of extra code, probably not worth it
         with self.assertRaises(cv2.error):
             print('\nExpecting error... ', end='')
-            readVideo('tests/corrupt.avi')
+            readVideo('tests/data/corrupt.avi')
             # corrupt.avi is literally just 1MB of /dev/random
 
     @unittest.skip("Unsure how to mock this for now")
@@ -40,4 +40,4 @@ class ReadVideoTestCases(unittest.TestCase):
     def testEmptyVideoFails(self):
         with self.assertRaises(cv2.error):
             print('\nExpecting error... ', end='')
-            frames = readVideo('tests/empty.avi')
+            frames = readVideo('tests/data/empty.avi')
