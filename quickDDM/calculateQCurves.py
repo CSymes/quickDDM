@@ -18,12 +18,9 @@ fourierDifferences: a complex array, (time, y, x)
 RETURN: a 1d intensity array, at increasing radii
 """
 def calculateQCurves(fourierDifferences):
-    #TODO: rearrange to avoid repeated division
-    absolutes = np.square(np.absolute(fourierDifferences))/((fourierDifferences.shape[1]*fourierDifferences.shape[2])^2)
+    averages = np.mean(fourierDifferences, axis = 0)
     ySize = fourierDifferences.shape[1]
     xSize = fourierDifferences.shape[2]
-    averages = np.mean(absolutes, axis = 0)
-    absolutes = 0 #Cleaning up after myself
     #For now, it is just mimicing the provided MATLAB, which isn't ideal, but sue me.
     yRange = np.arange(-ySize/2.0,ySize/2.0, dtype = np.int32)
     xRange = np.arange(-xSize/2.0,xSize/2.0, dtype = np.int32)
@@ -47,16 +44,11 @@ def calculateQCurves(fourierDifferences):
     return qCurve
 
 def calculateWithCalls(fourierDifferences):
-    absolutes = absolutesInitial(fourierDifferences)
-    averages = averagesLoop(absolutes)
-    absolutes = 0
+    # Normalising here no longer required - performed in the Fourier module
+    averages = averagesLoop(fourierDifferences)
     radiusGrid = generateGrid(averages.shape)
     averagedCurves = takeCurves(averages, radiusGrid)
     return averagedCurves
-
-def absolutesInitial(fourierDifferences):
-    sizeCorrection = 1/fourierDifferences.shape[1]*fourierDifferences.shape[2]
-    return np.square(np.absolute(fourierDifferences))*(sizeCorrection)
 
 def averagesLoop(absolutes):
     averages = np.mean(absolutes, axis = 0)
