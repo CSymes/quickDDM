@@ -19,12 +19,10 @@ RETURN: a 1d intensity array, at increasing radii
 """
 def calculateQCurves(fourierDifferences):
     #TODO: rearrange to avoid repeated division
-    absolutes = np.square(np.absolute(fourierDifferences))/((fourierDifferences.shape[1]*fourierDifferences.shape[2])^2)
-    averages = np.mean(absolutes, axis = 0)
+    averages = np.mean(fourierDifferences, axis = 0)
     #TODO: consider supression of center values
     #TODO: for the averaging in a circle, look at this:
     #Link: https://stackoverflow.com/questions/8979214/iterate-over-2d-array-in-an-expanding-circular-spiral
-    absolutes = 0 #Cleaning up after myself
     #For now, it is just mimicing the provided MATLAB, which isn't ideal, but sue me.
     yRange = np.arange(-averages.shape[0]/2.0,averages.shape[0]/2.0, dtype = np.int32)
     xRange = np.arange(-averages.shape[1]/2.0,averages.shape[1]/2.0, dtype = np.int32)
@@ -44,16 +42,11 @@ def calculateQCurves(fourierDifferences):
     return qCurves
 
 def calculateWithCalls(fourierDifferences):
-    absolutes = absolutesInitial(fourierDifferences)
-    averages = averagesLoop(absolutes)
-    absolutes = 0
+    # Normalising here no longer required - performed in the Fourier module
+    averages = averagesLoop(fourierDifferences)
     radiusGrid = generateGrid(averages.shape)
     averagedCurves = takeCurves(averages, radiusGrid)
     return averagedCurves
-
-def absolutesInitial(fourierDifferences):
-    sizeCorrection = 1/fourierDifferences.shape[1]*fourierDifferences.shape[2]
-    return np.square(np.absolute(fourierDifferences))*(sizeCorrection)
 
 def averagesLoop(absolutes):
     averages = np.mean(absolutes, axis = 0)

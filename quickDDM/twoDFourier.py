@@ -17,4 +17,10 @@ def twoDFourier(framesArray):
     #link: https://stackoverflow.com/questions/52387673/what-is-the-difference-between-numpy-fft-fft-and-numpy-fft-rfft/52388007
     #will need to test it thouroughly though
     framesArray = np.fft.fft2(framesArray)
-    return framesArray
+    return normaliseFourier(framesArray)
+
+def normaliseFourier(frames):
+    # Normalise the transform (based on size, move to real domain)
+    scaling = (frames.shape[1] * frames.shape[2]) ^ 2
+    normalised = np.square(np.absolute(frames))/scaling
+    return normalised
