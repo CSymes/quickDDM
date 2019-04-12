@@ -9,6 +9,7 @@ Currently has to be modified in source to change fitting
 """
 import numpy as np
 import scipy.optimize
+import matplotlib.pyplot as plt
 
 #A simple one expected for pure diffusion in some circumstances, from:
 #Differential Dynamic Microscopy of Bacterial Motility
@@ -39,36 +40,57 @@ def motilityFunction(tor, q, Z, alpha, vMean, D):
 def risingExponential(deltaT, A, B, otherTor):
     g = np.exp(-deltaT/otherTor)
     return 2*A*(1-g)+B
+
+
     
-#This will need to be adjusted for modularity. Perhaps taking the desired
-#fitting style as a function pointer?
-def fitCorrelationsToDiffusion(correlations, qValues):
+"""
+Extracts all fitting parameters from the correlations at the specified q
+values, with the specified fitting.
+correlations: The 2d matrix of intensity(dT,q)
+qValues: list of q values at which to fit
+fitting: string specifying which function to use
+RETURN: tuple of (list(popt),list(curve),list(qIndex)) where popt is the tuple
+of fitting parameters for a given q value, curve is the curve those parameters
+produce, and qIndex is the index within the correlations list that maps to that
+particular result's q value
+"""
+def fitCorrelationsToFunction(correlations, qValues, fitting):
     paramResults = []
+    fittedCurves = []
+    qIndexes = []
     for q in qValues:
-        #TODO: this needs to actual pull form the video size, should be
-        #len * pi
-        #It isn't required in all of the models either (?)
         correctedQ = q*np.pi/1024.0
         torCurve = correlations[:,q]
         torVector = np.arange(1,len(torCurve)+1)
-        """
-        TODO: consider defining upper and lower bands for parameters iwth know
-        ranges in actual experiments
-        uppers = ()
-        lowers = ()
-        """
-        #Fit to motility
-        #The ugly lambda structure is needed to hide q from the curve fitting
-        #Use this structure whenever you need to include q as a function param
-        #popt, pcov = scipy.optimize.curve_fit(lambda tor, Z, alpha, vMean, D: motilityFunction(tor, correctedQ, Z, alpha, vMean, D), torVector, torCurve)
-        #If Q doesn't need to be hidden use this simpler form
-        #popt, pcov = scipy.optimize.curve_fit(linearFunction, torVector, torCurve)
-        popt, pcov = scipy.optimize.curve_fit(risingExponential, torVector, torCurve)
+        #Extend this as required if more functions are wanted
+        fittingFunctions ={
+            "diffusion":diffusionFunction,
+            #This sort of lambda is used to hide variables from the fitting,
+            #mostly if the function is dependent on Q
+            "motility":lambda tor, Z, alpha, vMean, D: motilityFunction(tor, correctedQ, Z, alpha, vMean, D),
+            "rising exponential":risingExponential,
+            "linear":linearFunction
+        }
+        popt, pcov = scipy.optimize.curve_fit(fittingFunctions[fitting], torVector, torCurve)
         paramResults.append(popt)
-    return paramResults
+        #This * operator is a python-y thing that extracts a tuple into arguments
+        currentCurve = fittingFunctions[fitting](torVector, *popt)
+        fittedCurves.append(currentCurve)
+    
+    return (paramResults, fittedCurves, qIndexes)
 
+def plotCurveComparisons(correlations, fittingResult, qIndicies):
+    fitCurves = fittingResult[1]
+    for i in range(0,len(qIndicies)):
+        q = qIndicies[i]
+        torCurve = correlations[:,q]
+        torVector = np.arange(1,len(torCurve)+1)
+        plt.plot(torVector, torCurve, '-')
+        plt.plot(torVector, fitCurves[i], '--')
+    plt.show()
+    
 #Use this if you just want to run it in the console quickly, from a file.
-def bootstrap(path, qValues):
+def bootstrap(path, qValues, fitting):
     loadedCorrelations = np.loadtxt(path, delimiter = ' ')
-    fittingResult = fitCorrelationsToDiffusion(loadedCorrelations, qValues)
+    fittingResult = fitCorrelationsToFunction(loadedCorrelations, qValues, fitting)
     return fittingResult
