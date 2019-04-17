@@ -7,7 +7,6 @@ This is the most basic way of running the process. It will call each part
 of the process in turn, chaining them together.
 @author: Lionel
 """
-import sys
 import numpy as np
 import readVideo as rV
 import frameDifferencer as fD
@@ -16,15 +15,47 @@ import calculateQCurves as cQC
 import calculateCorrelation as cC
 
 #starting with the simplest case, consecutive frame differences
-spacings = np.array((13,14,15))
-correlations = []
-videoInput = rV.readVideo(sys.argv[1])
-for spacing in spacings:
-    frameDifferences = fD.frameDifferencer(videoInput, spacing)
-    fourierSections = tDF.twoDFourier(frameDifferences)
-    qCurve = cQC.calculateQCurves(fourierSections)
-    correlations.append(qCurve)
-correlations = cC.calculateCorrelation(correlations)
-if len(sys.argv) == 3:
-    with open(sys.argv[2], "ab") as file:
-        np.savetxt(file, correlations, delimiter = ' ')
+def differenceFirstMain(videoPath, spacings, outputPath = "None"):
+    #spacings = np.array((13,14,15))
+    correlations = []
+    videoInput = rV.readVideo(videoPath)
+    for spacing in spacings:
+        frameDifferences = fD.frameDifferencer(videoInput, spacing)
+        fourierSections = tDF.twoDFourier(frameDifferences)
+        qCurve = cQC.calculateQCurves(fourierSections)
+        correlations.append(qCurve)
+    correlations = cC.calculateCorrelation(correlations)
+    if outputPath != "None":
+        with open(outputPath, "ab") as file:
+            np.savetxt(file, correlations, delimiter = ' ')
+    return correlations
+
+def transformFirstMain(videoPath, spacings, outputPath = "None"):
+    correlations = []
+    videoInput = rV.readVideo(videoPath)
+    fourierSections = np.fft.fft2(videoInput)
+    for spacing in spacings:
+        frameDifferences = fD.frameDifferencer(fourierSections, spacing)
+        frameDifferences = tDF.normaliseFourier(frameDifferences)
+        qCurve = cQC.calculateQCurves(frameDifferences)
+        correlations.append(qCurve)
+    correlations = cC.calculateCorrelation(correlations)
+    if outputPath != "None":
+        with open(outputPath, "ab") as file:
+            np.savetxt(file, correlations, delimiter = ' ')
+    return correlations
+
+def cumulativeDifferenceMain(videoPath, spacings, outputPath = "None"):
+    #spacings = np.array((13,14,15))
+    correlations = []
+    videoInput = rV.readVideo(videoPath)
+    for spacing in spacings:
+        frameDifferences = fD.frameDifferencer(videoInput, spacing)
+        fourierMeans = tDF.cumulativeTransformAndAverage(frameDifferences)
+        qCurve = cQC.calculateWithCalls(fourierMeans)
+        correlations.append(qCurve)
+    correlations = cC.calculateCorrelation(correlations)
+    if outputPath != "None":
+        with open(outputPath, "ab") as file:
+            np.savetxt(file, correlations, delimiter = ' ')
+    return correlations

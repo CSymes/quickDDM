@@ -24,3 +24,19 @@ def normaliseFourier(frames):
     scaling = (frames.shape[1] * frames.shape[2]) ^ 2
     normalised = np.square(np.absolute(frames))/scaling
     return normalised
+
+    
+"""
+Attempt at decreasing memory demands by taking the average in the same action
+as the absolute value, to never have a full complex array in memory
+frames: a 3d array formatted as [frame order, y position, x position]
+RETURN: [inverse y, inverse x], average normalised absolute value
+"""
+def cumulativeTransformAndAverage(frames):
+    scaling = (frames.shape[1] * frames.shape[2]) ^ 2
+    averages = np.zeros(frames.shape[1:3])#Same spatial shape, no time
+    for i in range(0,frames.shape[0]):
+        averages += np.square(np.absolute(np.fft.fft2(frames[i,:,:])))
+    #Taking the mean and normalising for size
+    averages = (averages/scaling)/frames.shape[0]
+    return averages

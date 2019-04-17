@@ -45,7 +45,10 @@ def calculateQCurves(fourierDifferences):
 
 def calculateWithCalls(fourierDifferences):
     # Normalising here no longer required - performed in the Fourier module
-    averages = averagesLoop(fourierDifferences)
+    if len(fourierDifferences.shape) == 3:
+        averages = averagesLoop(fourierDifferences)
+    else:
+        averages = fourierDifferences
     radiusGrid = generateGrid(averages.shape)
     averagedCurves = takeCurves(averages, radiusGrid)
     return averagedCurves
