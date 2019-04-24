@@ -19,7 +19,7 @@ def readVideo(file):
     videoFile = cv2.VideoCapture(file)
 
     if not videoFile.isOpened():
-        raise cv2.error("Malformed video file")
+        raise cv2.error("Malformed video file (" + file + ")")
 
     numFrames = int(videoFile.get(cv2.CAP_PROP_FRAME_COUNT))
     pxHeight = int(videoFile.get(cv2.CAP_PROP_FRAME_HEIGHT))

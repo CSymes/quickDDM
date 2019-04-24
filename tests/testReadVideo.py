@@ -29,7 +29,7 @@ class ReadVideoTestCases(unittest.TestCase):
         # Workaround: https://eli.thegreenplace.net/2015/redirecting-all-kinds-of-stdout-in-python/
         # Just take a lot of extra code, probably not worth it
         with self.assertRaises(cv2.error):
-            print('\nExpecting error... ', end='')
+            print('\nExpecting ioctl error... ', end='')
             readVideo('tests/data/corrupt.avi')
             # corrupt.avi is literally just 1MB of /dev/random
 
@@ -39,5 +39,5 @@ class ReadVideoTestCases(unittest.TestCase):
 
     def testEmptyVideoFails(self):
         with self.assertRaises(cv2.error):
-            print('\nExpecting error... ', end='')
+            print('\nExpecting ioctl error... ', end='')
             frames = readVideo('tests/data/empty.avi')
