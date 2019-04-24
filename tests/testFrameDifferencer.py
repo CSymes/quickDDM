@@ -21,34 +21,27 @@ class FrameDifferenceTestCases(unittest.TestCase):
 
         self.assertTrue(numpy.array_equal(diff, gold)) # Check first subtraction (first two frames) is zero
 
-    @unittest.skip("Fails - only calculates the first frame diff per spacing for now")
     def testSubtractingUniqueFrames(self):
         # consists of a frame of white followed by a 70% grey frame
         frames = readVideo('tests/data/alternating.avi')
         diff = frameDifferencer(frames, 1)
 
-        gold = [[[int(255*0.3) for i in range(1024)] for j in range(1024)] for k in range(5 - 1)]
+        gold = [[[int(255*0.3) for i in range(1024)] for j in range(1024)] for k in range(2-1)]
 
         self.assertTrue(numpy.array_equal(diff, gold)) # compare first subtraction
 
-    @unittest.skip("Need to rework spacings")
-    def testCorrectNumberOfSpacingsCalculated(self):
-        frames = readVideo('tests/data/black.avi')
-        diff = frameDifferencer(frames, [1, 2, 3, 4, 5])
+    def testCorrectNumberOfFramesReturned(self):
+        frames = readVideo('tests/data/10frames.avi')
+        correctNum = lambda delta: (len(frames)-delta)
 
-        self.assertEqual([4, 3, 2, 1, 0], [len(d) for d in diff])
+        for delta in range(len(frames)):
+            diff = frameDifferencer(frames, delta)
+            self.assertEqual(len(diff), correctNum(delta))
 
     def testOverlyWideSpacingFails(self):
-        frames = readVideo('tests/data/black.avi')
-        diff = frameDifferencer(frames, 10)
-
-        # Behaviour unspecified for the moment - can either return an empty set of subtractions
-        # or maybe throw an error? TODO - need to decide whether the function should prevent this
-        # itself or expect the calling function to prevent it
-        self.assertEqual(len(diff), 0)
+        frames = readVideo('tests/data/10frames.avi')
+        self.assertRaises(ValueError, frameDifferencer, frames, 10)
 
     def testSingleFrameVideoGetsNoSoup(self):
         frames = readVideo('tests/data/short.avi')
-        diff = frameDifferencer(frames, 1)
-        
-        self.assertEqual(len(diff), 0)
+        self.assertRaises(ValueError, frameDifferencer, frames, 1)
