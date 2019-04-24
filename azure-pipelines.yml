@@ -25,3 +25,8 @@ steps:
     testResultsFiles: '**/TEST-*.xml'
     searchFolder: '/tmp/build/quickDDM-tests'
     testRunTitle: 'Publish test results'
+
+- script: |
+    cp tests/data/10frames.avi tests/data/timing.avi
+    python timing.py
+  displayName: 'Run program timer'

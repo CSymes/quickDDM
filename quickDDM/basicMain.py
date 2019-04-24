@@ -16,7 +16,7 @@ import calculateQCurves as cQC
 import calculateCorrelation as cC
 
 #starting with the simplest case, consecutive frame differences
-spacings = np.array((13,14,15))
+spacings = np.array((1, 2))
 correlations = []
 videoInput = rV.readVideo(sys.argv[1])
 for spacing in spacings:
