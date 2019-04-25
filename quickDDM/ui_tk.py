@@ -30,125 +30,235 @@ PREVIEW_DIM = 256 # size of the preview image (pixels, square)
 
 
 
-### Input Handlers
+
+class LoadFrame(Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        # prevent AttributeError when checking if it needs clearing before anything's been cleared
+        self.video_file = None
 
 
-"""Click handler for the video selection button"""
-def triggerVideoSelect(vars):
-    # Open a file selection dialogue
-    filename = askopenfilename(initialdir = '../tests/data', 
-                               title = 'Select video file', 
-                               filetypes = (('avi files', '*.avi'), 
-                                            ('all files','*.*')))
-    if not filename:
-        return # file selector aborted
 
-    loadVideo(vars, filename)
+    ### Input Handlers
 
-"""Handle direct file path entry"""
-def triggerFromEntry(vars, widget):
-    loadVideo(vars, widget.get())
 
-"""Select a video after being called by one of the above trigger methods"""
-def loadVideo(vars, filename):
-    # OpenCV sees much that is not clear to mere mortals...
-    videoFile = cv2.VideoCapture(filename)
+    """Click handler for the video selection button"""
+    def triggerVideoSelect(self):
+        # Open a file selection dialogue
+        filename = askopenfilename(initialdir = '../tests/data', 
+                                   title = 'Select video file', 
+                                   filetypes = (('avi files', '*.avi'), 
+                                                ('all files','*.*')))
+        if not filename:
+            return # file selector aborted
 
-    # Successfully opened the video
-    if videoFile.isOpened():
-        # ...including all its metadata, thankfully
-        frames = int(videoFile.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = videoFile.get(cv2.CAP_PROP_FPS)
-        width = int(videoFile.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        height = int(videoFile.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.loadVideo(filename)
 
-        # Update the labels in the UI that show the metadata
-        vars.FPS.set(f'{fps:.1f}')
-        vars.dim.set(f'{width}x{height} pixels')
-        vars.frames.set(f'{frames}')
+    """Handle direct file path entry"""
+    def triggerFromEntry(self, widget):
+        self.loadVideo(widget.get())
 
-        # Calculate the video length
-        length = frames/fps
-        lu = 's'
-        if (length > 60*60): # on the order of hours
-            length = length/60/60
-            lu = 'hours'
-        elif (length > 60*2): # more than 120 seconds long, might as well show as minutes
-            length = length/60
-            lu = 'min'
-        vars.length.set(f'{length:.2f} {lu}')
+    """Select a video after being called by one of the above trigger methods"""
+    def loadVideo(self, filename):
+        # OpenCV sees much that is not clear to mere mortals...
+        videoFile = cv2.VideoCapture(filename)
 
-        vars.address.set(filename) # update the displayed filename
-        vars.filename = filename # store the filename for the actual processing
-        vars.load_button['state'] = 'normal' # activate processing button
+        # Successfully opened the video
+        if videoFile.isOpened():
+            # ...including all its metadata, thankfully
+            frames = int(videoFile.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = videoFile.get(cv2.CAP_PROP_FPS)
+            width = int(videoFile.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            height = int(videoFile.get(cv2.CAP_PROP_FRAME_WIDTH))
 
-        vars.video_file = videoFile
-        handleScroll(vars, 'moveto', '0.0', '') # Activate scrollbar, show preview
+            # Update the labels in the UI that show the metadata
+            self.FPS.set(f'{fps:.1f}')
+            self.dim.set(f'{width}x{height} pixels')
+            self.numFrames.set(f'{frames}')
 
-        # Leave videoFile open for fetching of previews
+            # Calculate the video length
+            length = frames/fps
+            lu = 's'
+            if (length > 60*60): # on the order of hours
+                length = length/60/60
+                lu = 'hours'
+            elif (length > 60*2): # more than 120 seconds long, might as well show as minutes
+                length = length/60
+                lu = 'min'
+            self.length.set(f'{length:.2f} {lu}')
 
-    # File didn't open - not a video, corrupt, read error, or whatever else it could be
-    else:
-        messagebox.showerror('File Error',
-                             'There was an issue with loading or accessing the ' +
-                             'specified video file. Double check it\'s a video and that ' +
-                             'you have the necessary permissions')
-        videoFile.release() # Release anyway
+            self.address.set(filename) # update the displayed filename
+            self.load_button['state'] = 'normal' # activate processing button
 
-        # TODO delete any previously loaded data
+            self.video_file = videoFile
+            self.handleScroll('moveto', '0.0') # Activate scrollbar, show preview
 
-"""Click handler for analysis button"""
-def triggerAnalysis(vars):
-    vars.video_file.release()
+            # Leave videoFile open for fetching of previews
 
-    import sys
-    sys.exit(0)
+        # File didn't open - not a video, corrupt, read error, or whatever else it could be
+        else:
+            messagebox.showerror('File Error',
+                                 'There was an issue with loading or accessing the ' +
+                                 'specified video file. Double check it\'s a video and that ' +
+                                 'you have the necessary permissions')
+            videoFile.release() # Release anyway
+            self.clearPreviews() # filepath no longer valid - clear any previous preview data
 
-def setPreview(vars, index):
-    vars.video_file.set(cv2.CAP_PROP_POS_FRAMES, index)
-    status, frame = vars.video_file.read()
+    """Delete all metadata and image preview data"""
+    def clearPreviews(self):
+        # Metadata removal
+        self.FPS.set('')
+        self.dim.set('')
+        self.numFrames.set('')
+        self.length.set('')
 
-    if status:
-        thumSize = vars.img_preview.winfo_width()
-        pimg = Image.fromarray(frame) # convert from OpenCV to PIL
-        pimg.thumbnail((thumSize, thumSize)) # downsize image
-        tkimg = PhotoImage(image=pimg) # and convert to TK
+        self.scrub.set('0.0', '1.0') # Reset/disable scrollbar
+        self.img_preview.delete('all') # Delete the image preview
+        if self.video_file: # if necessary
+            self.video_file.release() # release the previous video stream
+        self.video_file = None # and allow garbage collection
 
-        # Insert image onto the canvas
-        vars.img_preview.create_image((0, 0), image=tkimg, anchor='nw')
+    """Click handler for analysis button"""
+    def triggerAnalysis(self):
+        self.video_file.release()
+        # TODO create ProcessingFrame
+        self.destroy()
 
-        # prevent garbage collection
-        # see http://effbot.org/pyfaq/why-do-my-tkinter-images-not-appear.htm
-        vars.img_preview.img = tkimg
-    else:
-        print('Video could not be previewed - good luck processing it')
+    """Rips the frame at `index` out of the chosen video and shows in the preview pane"""
+    def setPreview(self, index):
+        self.video_file.set(cv2.CAP_PROP_POS_FRAMES, index)
+        status, frame = self.video_file.read()
 
-def handleScroll(vars, msg, x, units):
-    if not vars.frames.get():
-        return # No scrolling until a video's been selected, mate
+        if status:
+            thumSize = self.img_preview.winfo_width()
+            pimg = Image.fromarray(frame) # convert from OpenCV to PIL
+            pimg.thumbnail((thumSize, thumSize)) # downsize image
+            tkimg = PhotoImage(image=pimg) # and convert to TK
 
-    x = float(x) # It's a string for some reason
+            # Insert image onto the canvas
+            self.img_preview.create_image((0, 0), image=tkimg, anchor='nw')
 
-    if msg == 'moveto': # Truck was dragged
-        pass
-    elif msg == 'scroll':
-        if units == 'pages': # Scrollbar was clicked on
+            # prevent garbage collection
+            # see http://effbot.org/pyfaq/why-do-my-tkinter-images-not-appear.htm
+            self.img_preview.img = tkimg
+        else:
+            print('Video could not be previewed - good luck processing it')
+
+    """Deals with movement of the scrollbar for the preview pane"""
+    def handleScroll(self, msg, x, units=''):
+        if not self.numFrames.get():
+            return # No scrolling until a video's been selected, mate
+
+        x = float(x) # It's a string for some reason
+
+        if msg == 'moveto': # Truck was dragged
             pass
-        elif units == 'units': # Arrow clicked on
-            x = vars.scrub.get()[0] + x/SCRUB_STEPS # budge the truck one index
+        elif msg == 'scroll':
+            if units == 'pages': # Scrollbar was clicked on
+                pass
+            elif units == 'units': # Arrow clicked on
+                x = self.scrub.get()[0] + x/SCRUB_STEPS # budge the truck one index
 
-    x = min(max(float(x), 0), 1-1/SCRUB_STEPS) # Bound its movement
-    x = float(f'{x:.1f}') # Show discrete steps # this will be an issue for steps other than 0.1
-    vars.scrub.set(str(x), str(x+1/SCRUB_STEPS)) # Update scrollbar position
+        x = min(max(float(x), 0), 1-1/SCRUB_STEPS) # Bound its movement
+        x = float(f'{x:.1f}') # Show discrete steps # this will be an issue for steps other than 0.1
+        self.scrub.set(str(x), str(x+1/SCRUB_STEPS)) # Update scrollbar position
 
-    # Note this will never show the final frame.
-    setPreview(vars, int(int(vars.frames.get())*x))
-    # TODO some sort of caching - this wastes a lot of cpu redoing frames when scrubbing
+        # Note this will never show the final frame.
+        self.setPreview(int(int(self.numFrames.get())*x))
+        # TODO some sort of caching - this "wastes" a lot of CPU/IO redoing frames when scrubbing
 
 
 
-### UI Configuration
+    ### UI Configuration
 
+
+    """Add elements to allow picking of a video file and for metadata preview"""
+    def populateL(self):
+        # StringVars for dynamic label updating
+        self.address = StringVar(); self.address.set(ADDR_PLACEHOLDER)
+        self.FPS = StringVar()
+        self.dim = StringVar()
+        self.numFrames = StringVar()
+        self.length = StringVar()
+
+
+        # file address label
+        lAdd = Entry(self, textvariable=self.address)
+        lAdd.grid(row=1, column=1, columnspan=2, sticky=[E, W], padx=(0, WINDOW_PADDING))
+        # Juggling to clear/restore placeholder text
+        lAdd.bind('<FocusIn>', lambda e: e.widget.delete(0, 'end') if 
+                                    (e.widget.get() == ADDR_PLACEHOLDER) else None)
+        lAdd.bind('<FocusOut>', lambda e: (e.widget.insert(0, ADDR_PLACEHOLDER) or self.clearPreviews()) 
+                  if (e.widget.get() == '') else self.triggerFromEntry(e.widget))
+
+        # file chooser button
+        lChoose = Button(self, text='Choose Source', command=self.triggerVideoSelect)
+        lChoose.grid(row=1, column=3)
+
+        # metadata pane - contains all metadata labels added in the below block
+        lMetadata = Frame(self, borderwidth=1, relief='solid')
+        lMetadata.grid(row = 2, column=1, 
+                       rowspan=2, columnspan=3,
+                       sticky=[E, W, N, S],
+                       pady=5)
+        if lMetadata:
+            # Subframe to allow padding inside the border
+            lMetaSubframe = Frame(lMetadata)
+            lMetaSubframe.grid(row=0, column=0, padx=15, pady=10)
+
+            # Descriptor labels
+            mFPS = Label(lMetaSubframe, text='FPS: ')
+            mFPS.grid(row = 0, column=0, sticky=E)
+            mDim = Label(lMetaSubframe, text='Dimensions: ')
+            mDim.grid(row = 1, column=0, sticky=E)
+            mFrames = Label(lMetaSubframe, text='# of Frames: ')
+            mFrames.grid(row = 2, column=0, sticky=E)
+            mLength = Label(lMetaSubframe, text='Video Length: ')
+            mLength.grid(row = 3, column=0, sticky=E)
+
+            # Dynamic labels - get updated when video selected
+            dFPS = Label(lMetaSubframe, textvariable=self.FPS)
+            dFPS.grid(row = 0, column=1, sticky=W)
+            dDim = Label(lMetaSubframe, textvariable=self.dim)
+            dDim.grid(row = 1, column=1, sticky=W)
+            dFrames = Label(lMetaSubframe, textvariable=self.numFrames)
+            dFrames.grid(row = 2, column=1, sticky=W)
+            dLength = Label(lMetaSubframe, textvariable=self.length)
+            dLength.grid(row = 3, column=1, sticky=W)
+
+        # Button to progress to next stage
+        lLoad = Button(self, text='Analyse Video', command=self.triggerAnalysis)
+        lLoad.grid(row=5, column=2)
+        lLoad['state'] = 'disabled'
+        self.load_button = lLoad # store button for reactivation later
+
+        # Favour whitespace in favour of stretching the metadata pane
+        self.rowconfigure(3, weight=1)
+        self.rowconfigure(4, weight=10)
+        # Equal width for space on both sides of the analysis button
+        self.columnconfigure(1, minsize=lChoose.winfo_reqwidth())
+
+    """Add UI elements for the video preview"""
+    def populateR(self):
+        # use a Canvas to draw the actual image
+        preview = Canvas(self, relief='solid', borderwidth=1)
+        preview.grid(row=1, column=5, rowspan=4, sticky=N)
+        preview.configure(width=PREVIEW_DIM, height=PREVIEW_DIM)
+        self.img_preview = preview # store the canvas so we can draw onto it later
+
+        # Horizontal scrollbar to allow scrubbing through the video
+        # This is kinda superfluous since we're looking at such small changes anyway 🙃
+        scrub = Scrollbar(self, orient='horizontal', command=self.handleScroll)
+        scrub.grid(row=5, column=5, sticky=[E, W])
+        self.scrub = scrub
+
+    """Add padding around the root window"""
+    def configureFrame(self):
+        self.rowconfigure(0, minsize=WINDOW_PADDING) # Padding off top of the window
+        self.rowconfigure(5, pad=WINDOW_PADDING*2) # Bump processing button/slider off window edge+canvas
+        self.columnconfigure(0, minsize=WINDOW_PADDING) # Padding off left side of the window
+        self.columnconfigure(4, minsize=WINDOW_PADDING) # Gap between left and right sections
+        self.columnconfigure(6, minsize=WINDOW_PADDING) # Padding off right side of the window
 
 """Set the window's position"""
 def center(win):
@@ -166,110 +276,20 @@ def center(win):
 
     win.geometry(f'{h}x{w}+{x}+{y}') # And set them
 
-"""Add elements to allow picking of a video file and for metadata preview"""
-def populateL(parent, vars):
-    # StringVars for dynamic label updating
-    vars.address = StringVar(); vars.address.set(ADDR_PLACEHOLDER)
-    vars.FPS = StringVar()
-    vars.dim = StringVar()
-    vars.frames = StringVar()
-    vars.length = StringVar()
+if __name__ == '__main__':
+    # Create a new Tk framework instance / window
+    window = Tk()
 
+    loader = LoadFrame(window)
+    loader.grid()
 
-    # file address label
-    lAdd = Entry(parent, textvariable=vars.address)
-    lAdd.grid(row=1, column=1, columnspan=2, sticky=[E, W], padx=(0, WINDOW_PADDING))
-    # Juggling to clear/restore placeholder text
-    lAdd.bind('<FocusIn>', lambda e: e.widget.delete(0, 'end') if 
-                                (e.widget.get() == ADDR_PLACEHOLDER) else None)
-    lAdd.bind('<FocusOut>', lambda e: e.widget.insert(0, ADDR_PLACEHOLDER) if 
-                                (e.widget.get() == '') else triggerFromEntry(vars, e.widget))
-
-    # file chooser button
-    lChoose = Button(parent, text='Choose Source', command=lambda: triggerVideoSelect(vars))
-    lChoose.grid(row=1, column=3)
-
-    # metadata pane - contains all metadata labels added in the below block
-    lMetadata = Frame(parent, borderwidth=1, relief='solid')
-    lMetadata.grid(row = 2, column=1, 
-                   rowspan=2, columnspan=3,
-                   sticky=[E, W, N, S],
-                   pady=5)
-    if lMetadata:
-        # Subframe to allow padding inside the border
-        lMetaSubframe = Frame(lMetadata)
-        lMetaSubframe.grid(row=0, column=0, padx=15, pady=10)
-
-        # Descriptor labels
-        mFPS = Label(lMetaSubframe, text='FPS: ')
-        mFPS.grid(row = 0, column=0, sticky=E)
-        mDim = Label(lMetaSubframe, text='Dimensions: ')
-        mDim.grid(row = 1, column=0, sticky=E)
-        mFrames = Label(lMetaSubframe, text='# of Frames: ')
-        mFrames.grid(row = 2, column=0, sticky=E)
-        mLength = Label(lMetaSubframe, text='Video Length: ')
-        mLength.grid(row = 3, column=0, sticky=E)
-
-        # Dynamic labels - get updated when video selected
-        dFPS = Label(lMetaSubframe, textvariable=vars.FPS)
-        dFPS.grid(row = 0, column=1, sticky=W)
-        dDim = Label(lMetaSubframe, textvariable=vars.dim)
-        dDim.grid(row = 1, column=1, sticky=W)
-        dFrames = Label(lMetaSubframe, textvariable=vars.frames)
-        dFrames.grid(row = 2, column=1, sticky=W)
-        dLength = Label(lMetaSubframe, textvariable=vars.length)
-        dLength.grid(row = 3, column=1, sticky=W)
-
-    # Button to progress to next stage
-    lLoad = Button(parent, text='Analyse Video', command=lambda: triggerAnalysis(vars))
-    lLoad.grid(row=5, column=2)
-    lLoad['state'] = 'disabled'
-    vars.load_button = lLoad # store button for reactivation later
-
-    # Favour whitespace in favour of stretching the metadata pane
-    parent.rowconfigure(3, weight=1)
-    parent.rowconfigure(4, weight=10)
-    # Equal width for space on both sides of the analysis button
-    parent.columnconfigure(1, minsize=lChoose.winfo_reqwidth())
-
-"""Add UI elements for the video preview"""
-def populateR(parent, vars):
-    # use a Canvas to draw the actual image
-    preview = Canvas(parent, relief='solid', borderwidth=1)
-    preview.grid(row=1, column=5, rowspan=4, sticky=N)
-    preview.configure(width=PREVIEW_DIM, height=PREVIEW_DIM)
-    vars.img_preview = preview # store the canvas so we can draw onto it later
-
-    # Horizontal scrollbar to allow scrubbing through the video
-    # This is kinda superfluous since we're looking at such small changes anyway 🙃
-    scrub = Scrollbar(parent, orient='horizontal',
-                      command=lambda x, y, z='': handleScroll(vars, x, y, z))
-    scrub.grid(row=5, column=5, sticky=[E, W])
-    vars.scrub = scrub
-
-"""Add padding around the root window"""
-def configureFrame(parent):
-    parent.rowconfigure(0, minsize=WINDOW_PADDING) # Padding off top of the window
-    parent.rowconfigure(5, pad=WINDOW_PADDING*2) # Bump processing button/slider off window edge+canvas
-    parent.columnconfigure(0, minsize=WINDOW_PADDING) # Padding off left side of the window
-    parent.columnconfigure(4, minsize=WINDOW_PADDING) # Gap between left and right sections
-    parent.columnconfigure(6, minsize=WINDOW_PADDING) # Padding off right side of the window
+    loader.populateL() # video load/data elements
+    loader.populateR() # video preview elements
+    loader.configureFrame()  # window margins, etc.
 
     window.update() # generate geometry before moving window
     center(window) # set window location
     window.winfo_toplevel().title("quickDDM")
     window.resizable(False, False) # It's not really super responsive
-
-if __name__ == '__main__':
-    # Create a new Tk framework instance / window
-    window = Tk()
-
-    # Blank container to store shared data in
-    # Allows dynamic updating of text in the UI
-    vars = type('', (), {})()
-
-    populateL(window, vars) # video load/data elements
-    populateR(window, vars) # video preview elements
-    configureFrame(window)  # window margins, etc.
 
     window.mainloop() # hand control off to tkinter
