@@ -9,12 +9,13 @@ import numpy as np
 """
 videoFrames: a real or complex 3d array, where the dimensions map to 
 (frame number, y position, x position)
-spacings: a numpy array containing the different spacings to use
+spacing: a single integer specifying the spacing between frames to subtract
 RETURN: list(array(frame order, y position, x position))
 """
-def frameDifferencer(videoFrames, spacings):
+def frameDifferencer(videoFrames, spacing):
+    if len(videoFrames) <= spacing:
+        raise ValueError('Spacing delta too large for given frames')
+
     #TODO: try doing this without any loops, just numpyness
-    differences = []
-    for i in spacings:
-        differences.append(videoFrames[i:videoFrames.shape[0],:,:] - videoFrames[0:videoFrames.shape[0] - i,:,:])
+    differences = videoFrames[spacing:videoFrames.shape[0],:,:] - videoFrames[0:videoFrames.shape[0] - spacing,:,:]
     return differences
