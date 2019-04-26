@@ -22,8 +22,10 @@ from PIL import Image
 from PIL.ImageTk import PhotoImage
 
 import cv2
+import numpy
 
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures as futures
+from queue import Queue
 
 
 WINDOW_PADDING = 10 # pixels
@@ -34,7 +36,8 @@ PREVIEW_DIM = 256 # size of the preview image (pixels, square)
 # ProcessingFrame constants
 SAMPLE_DIM = 512
 
-pool = ThreadPoolExecutor(max_workers=10)
+threadPool = futures.ThreadPoolExecutor(max_workers=10)
+threadResults = []
 
 
 
@@ -108,8 +111,8 @@ class LoadFrame(Frame):
             self.clearPreviews() # filepath no longer valid - clear any previous preview data
 
             messagebox.showerror('File Error',
-                                 'There was an issue with loading or accessing the ' +
-                                 'specified video file. Double check it\'s a video and that ' +
+                                 'There was an issue with loading or accessing the '
+                                 'specified video file. Double check it\'s a video and that '
                                  'you have the necessary permissions')
             videoFile.release() # Release anyway
 
@@ -281,19 +284,68 @@ class ProcessingFrame(Frame):
         self.populate()
         center(parent) # Update window dimensions/placement
 
-        self.beginAnalysis(fname) # Begin processing the video
+        self.correlation = None
+
+        # TODO calc max delta
+        maxDelta = 4
+        deltaStep = 1
+
+        # Begin processing the video
+        startThread(self.beginAnalysis, fname, maxDelta, deltaStep)
 
 
 
     ### Processing
 
 
-    """Begin the video analysis. See basicMain.py"""
-    def beginAnalysis(self, fname):
-        pass # TODO everything
+    """
+    Begin the video analysis - see basicMain.py
+    Threaded away from the UI
+    """
+    def beginAnalysis(self, fname, maxDelta, deltaStep):
+        # self.stage    # progress label
+        # self.progress # progress bar
+        # self.results  # list
+
+        import time
+
+        frames = readVideo(fname)
+        print(f'frames: {len(frames)}')
+
+        steps = range(1, maxDelta+1, deltaStep)
+        print(f'steps: {len(steps)}')
+        cor = {}
+
+        for spacing in steps:
+            self.stage.set(f'Processing Δ {spacing//deltaStep}/{len(steps)}')
+            self.progress.set(100*(spacing-1)/deltaStep/len(steps))
+
+            print(f'\tdelta={spacing}')
+            diff = frameDifferencer(frames, spacing)
+            four = twoDFourier(diff)
+            q = calculateQCurves(four)
+            cor[spacing] = q
+
+            self.results.insert('end', f'Delta {spacing}')
+        self.stage.set('Done!')
+        self.progress.set(100)
+
+        correlation = calculateCorrelation(list(cor.values()))
+        print('Done')
+        self.correlation = correlation
+
+
+
+        """for i, f in enumerate(frames):
+            mn = numpy.mean(f)
+            self.results.insert('end', f'Frame {i}: {mn:.5f}')
+            self.results.select_set(i)"""
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self):
+        if self.correlation is None:
+            return
+
         filename = asksaveasfilename(initialdir = '.', 
                                      title = 'Select save location', 
                                      filetypes = (('Comma Seperated Values', '*.csv'),))
@@ -302,11 +354,10 @@ class ProcessingFrame(Frame):
 
         # Split IO onto its own thread
         def save(self, fn): # TODO actually save
-            import time
-            time.sleep(2)
+            numpy.savetxt(fn, self.correlation, delimiter='\t', fmt='%10.5f')
             print('Saved to '+ fn)
 
-        pool.submit(save, self, filename)
+        startThread(save, self, filename)
         # TODO some sort of progress indicator in place of button?
         # https://stackoverflow.com/questions/3819354/in-tkinter-is-there-any-way-to-make-a-widget-not-visible
 
@@ -361,8 +412,9 @@ class ProcessingFrame(Frame):
             bDirectional.grid(row=0, column=2, padx=(WINDOW_PADDING, WINDOW_PADDING*4))
             bSave.grid(row=0, column=3)
 
-        pResults = Listbox(self)
+        pResults = Listbox(self, selectmode='extended')
         pResults.grid(row=2, column=0, sticky=[E, W, N, S])
+        self.results = pResults
 
         pCurves = Canvas(self, relief='solid', borderwidth=1)
         pCurves.configure(width=SAMPLE_DIM, height=SAMPLE_DIM)
@@ -375,6 +427,9 @@ class ProcessingFrame(Frame):
         # TODO allow resizing?
 
 
+def startThread(*args):
+    future = threadPool.submit(*args)
+    threadResults.append(future)
 
 """Set the window's position"""
 def center(win):
@@ -411,5 +466,14 @@ if __name__ == '__main__':
     window.winfo_toplevel().title("quickDDM")
     window.resizable(False, False) # It's not really super responsive
 
-    with pool: # Ensure thread pool gets shutdown
+    with threadPool: # Ensure thread pool gets shutdown
+        def checkThreads(): # periodic poll to check for threaded errors
+            [done, ndone] = futures.wait(threadResults, timeout=0, return_when=futures.FIRST_COMPLETED)
+            for future in done:
+                print(f'Thread return: {future.result()}')
+                threadResults.remove(future)
+
+            window.after(100, checkThreads)
+        window.after(100, checkThreads)
+
         window.mainloop() # hand control off to tkinter
