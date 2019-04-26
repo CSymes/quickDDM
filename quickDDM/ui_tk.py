@@ -59,9 +59,9 @@ class LoadFrame(Frame):
     """Click handler for the video selection button"""
     def triggerVideoSelect(self):
         # Open a file selection dialogue
-        filename = askopenfilename(initialdir = '../tests/data', 
-                                   title = 'Select video file', 
-                                   filetypes = (('avi files', '*.avi'), 
+        filename = askopenfilename(initialdir = '../tests/data',
+                                   title = 'Select video file',
+                                   filetypes = (('avi files', '*.avi'),
                                                 ('all files','*.*')))
         if not filename:
             return # file selector aborted
@@ -208,9 +208,9 @@ class LoadFrame(Frame):
         lAdd = Entry(self, textvariable=self.address)
         lAdd.grid(row=0, column=0, columnspan=2, sticky=[E, W], padx=(0, WINDOW_PADDING))
         # Juggling to clear/restore placeholder text
-        lAdd.bind('<FocusIn>', lambda e: self.address.set('') if 
+        lAdd.bind('<FocusIn>', lambda e: self.address.set('') if
                                     (self.address.get() == ADDR_PLACEHOLDER) else None)
-        lAdd.bind('<FocusOut>', lambda e: (self.address.set(ADDR_PLACEHOLDER) or self.clearPreviews()) 
+        lAdd.bind('<FocusOut>', lambda e: (self.address.set(ADDR_PLACEHOLDER) or self.clearPreviews())
                   if (self.address.get() == '') else self.loadVideo(self.address.get()))
 
         # file chooser button
@@ -219,7 +219,7 @@ class LoadFrame(Frame):
 
         # metadata pane - contains all metadata labels added in the below block
         lMetadata = Frame(self, borderwidth=1, relief='solid')
-        lMetadata.grid(row = 1, column=0, 
+        lMetadata.grid(row = 1, column=0,
                        rowspan=2, columnspan=3,
                        sticky=[E, W, N, S],
                        pady=5)
@@ -276,11 +276,10 @@ class LoadFrame(Frame):
 
 
 
-
 class ProcessingFrame(Frame):
     def __init__(self, parent, fname):
         super().__init__(parent, padding=WINDOW_PADDING)
-        
+
         self.populate()
         center(parent) # Update window dimensions/placement
 
@@ -303,67 +302,78 @@ class ProcessingFrame(Frame):
     Threaded away from the UI
     """
     def beginAnalysis(self, fname, maxDelta, deltaStep):
-        # self.stage    # progress label
-        # self.progress # progress bar
-        # self.results  # list
-
-        import time
-
+        self.stage.set('Loading frames from disk')
         frames = readVideo(fname)
         print(f'frames: {len(frames)}')
 
-        steps = range(1, maxDelta+1, deltaStep)
-        print(f'steps: {len(steps)}')
-        cor = {}
+        # list of frame deltas to analyse
+        deltas = range(1, maxDelta+1, deltaStep)
+        print(f'# of deltas: {len(deltas)}')
+        curves = [] # store processed data
 
-        for spacing in steps:
-            self.stage.set(f'Processing Δ {spacing//deltaStep}/{len(steps)}')
-            self.progress.set(100*(spacing-1)/deltaStep/len(steps))
-
+        # TODO test multiprocessing the deltas
+        # https://stackoverflow.com/questions/659865/multiprocessing-sharing-a-large-read-only-object-between-processes
+        # TODO test Fourier before delta
+        # check shelving out if memory an issues
+        # https://docs.python.org/3/library/shelve.html
+        for i, spacing in enumerate(deltas):
+            self.stage.set(f'Processing Δ {i+1}/{len(deltas)}')
+            self.progress.set(100*i/len(deltas))
             print(f'\tdelta={spacing}')
+
+
             diff = frameDifferencer(frames, spacing)
             four = twoDFourier(diff)
             q = calculateQCurves(four)
-            cor[spacing] = q
+            curves.append(q)
 
-            self.results.insert('end', f'Delta {spacing}')
-        self.stage.set('Done!')
+
+            self.results.insert('end', f'Δ = {spacing}')
+
+            # Select this entry in the list if all other entries selected
+            if (len(self.results.curselection()) == i):
+                self.results.select_set(i)
+
+        self.progress.set(100*(len(deltas)-0.5)/len(deltas))
+        self.stage.set('Forming correlation function')
+        self.correlation = calculateCorrelation(curves)
+        print('cofunc:', self.correlation.shape)
+
         self.progress.set(100)
-
-        correlation = calculateCorrelation(list(cor.values()))
+        self.stage.set('Done!')
         print('Done')
-        self.correlation = correlation
 
-
-
-        """for i, f in enumerate(frames):
-            mn = numpy.mean(f)
-            self.results.insert('end', f'Frame {i}: {mn:.5f}')
-            self.results.select_set(i)"""
+        self.deltas = deltas
+        self.curves = curves
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self):
         if self.correlation is None:
             return
 
-        filename = asksaveasfilename(initialdir = '.', 
-                                     title = 'Select save location', 
+        filename = asksaveasfilename(initialdir = '.',
+                                     title = 'Select save location',
                                      filetypes = (('Comma Seperated Values', '*.csv'),))
         if not filename:
             return # file selector aborted
 
         # Split IO onto its own thread
-        def save(self, fn): # TODO actually save
+        def save(self, fn):
             numpy.savetxt(fn, self.correlation, delimiter='\t', fmt='%10.5f')
             print('Saved to '+ fn)
 
         startThread(save, self, filename)
-        # TODO some sort of progress indicator in place of button?
-        # https://stackoverflow.com/questions/3819354/in-tkinter-is-there-any-way-to-make-a-widget-not-visible
+
+    """Event handler for the list of deltas to update the displayed plots"""
+    def updateGraphs(self, event):
+        print([event.widget.get(i) for i in event.widget.curselection()])
+
+        for i in event.widget.curselection():
+            pass
 
     """
     Generates curve fitting for the current data
-    Options for `model` are 
+    Options for `model` are
         'motility'
         'brownian'
     """
@@ -385,12 +395,12 @@ class ProcessingFrame(Frame):
             # https://stackoverflow.com/questions/17039481/how-to-create-transparent-widgets-using-tkinter
 
             self.stage = StringVar()
-            self.stage.set('test')
+            self.stage.set('Initialising Flux-nalysis Engine')
             l = Label(fProgress, textvariable=self.stage)
             l.grid(row=0, column=0)
 
             self.progress = IntVar()
-            self.progress.set(65)
+            self.progress.set(0)
             pBar = Progressbar(fProgress, mode='determinate', variable=self.progress)
             pBar.grid(row=1, column=0, sticky=[E, W])
 
@@ -414,14 +424,16 @@ class ProcessingFrame(Frame):
 
         pResults = Listbox(self, selectmode='extended')
         pResults.grid(row=2, column=0, sticky=[E, W, N, S])
+        pResults.bind('<<ListboxSelect>>', self.updateGraphs)
         self.results = pResults
+        # TODO make a custom Listbox subclass and overhaul the selection system
 
         pCurves = Canvas(self, relief='solid', borderwidth=1)
         pCurves.configure(width=SAMPLE_DIM, height=SAMPLE_DIM)
         pCurves.grid(row=2, column=2)
 
         self.rowconfigure(1, minsize=WINDOW_PADDING) # buttons and list/canvas
-        self.columnconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1, minsize=175) # allow for longer progress strings
         self.columnconfigure(1, minsize=WINDOW_PADDING) # Gap between left and right sections
         self.columnconfigure(2, weight=3)
         # TODO allow resizing?
@@ -477,3 +489,6 @@ if __name__ == '__main__':
         window.after(100, checkThreads)
 
         window.mainloop() # hand control off to tkinter
+
+# TODO Think about splitting this into multiple files
+#      Maybe have a UI module instead of a UI *file*
