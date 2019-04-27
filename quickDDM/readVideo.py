@@ -33,7 +33,7 @@ def readVideo(file):
         readStatus, frameBuffer = videoFile.read()
         if not readStatus:
             raise OSError('The video file has an error')
-        videoArray[framesRead] = frameBuffer[:,:,0]
+        videoArray[framesRead] = np.array(frameBuffer[:,:,0])
         framesRead += 1
     videoFile.release()
     return videoArray

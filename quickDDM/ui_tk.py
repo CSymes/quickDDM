@@ -27,6 +27,9 @@ import numpy
 import concurrent.futures as futures
 from queue import Queue
 
+import resource
+from timeit import default_timer as time
+
 
 WINDOW_PADDING = 10 # pixels
 # LoadFrame constants
@@ -302,6 +305,8 @@ class ProcessingFrame(Frame):
     Threaded away from the UI
     """
     def beginAnalysis(self, fname, maxDelta, deltaStep):
+        startTime = time()
+
         self.stage.set('Loading frames from disk')
         frames = readVideo(fname)
         print(f'frames: {len(frames)}')
@@ -316,15 +321,19 @@ class ProcessingFrame(Frame):
         # TODO test Fourier before delta
         # check shelving out if memory an issues
         # https://docs.python.org/3/library/shelve.html
+
+        print(frames[0].shape)
+        fours = numpy.array([twoDFourier(f) for f in frames])
+
         for i, spacing in enumerate(deltas):
             self.stage.set(f'Processing Δ {i+1}/{len(deltas)}')
             self.progress.set(100*i/len(deltas))
             print(f'\tdelta={spacing}')
 
 
-            diff = frameDifferencer(frames, spacing)
-            four = twoDFourier(diff)
-            q = calculateQCurves(four)
+            diff = frameDifferencer(fours, spacing)
+            # four = twoDFourier(diff)
+            q = calculateQCurves(diff)
             curves.append(q)
 
 
@@ -345,6 +354,16 @@ class ProcessingFrame(Frame):
 
         self.deltas = deltas
         self.curves = curves
+
+        #                   kb RAM, time taken
+        # for a 10-frame vid
+        #   naively:        410860, 4.77s
+        #   fourier first:  353368, 2.04s
+        # 100-frames
+        #   naively:       4318268, 51.9s
+        #   fourier first: 2683788, 13.6s
+        print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        print(f'time: {time() - startTime:.2f}')
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self):
@@ -388,6 +407,7 @@ class ProcessingFrame(Frame):
 
     """Create UI elements for viewing/analysing the processed data"""
     def populate(self):
+        # Container for the progress bar/label
         fProgress = Frame(self)#, relief='solid', borderwidth=1)
         fProgress.grid(row=0, column=0, sticky=[E, W])
         if fProgress:
@@ -408,6 +428,7 @@ class ProcessingFrame(Frame):
             fProgress.columnconfigure(0, weight=10000)
 
 
+        # Container
         fFitting = Frame(self)
         fFitting.grid(row=0, column=2, sticky=E)
         if fFitting:
