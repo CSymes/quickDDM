@@ -17,6 +17,7 @@ from tkinter import *
 from tkinter.ttk import *
 from tkinter import messagebox
 from tkinter.filedialog import askopenfilename, asksaveasfilename
+from tkinter.messagebox import askokcancel
 
 from PIL import Image
 from PIL.ImageTk import PhotoImage
@@ -24,10 +25,13 @@ from PIL.ImageTk import PhotoImage
 import cv2
 import numpy
 
+# from pathos.multiprocessing import Pool as ProcPool
 import concurrent.futures as futures
-from queue import Queue
+# from queue import Queue
 
-import resource
+# measure (peak) ram usage - 'nix only, sorry
+try: import resource; rRam = True
+except ModuleNotFoundError: rRam = False
 from timeit import default_timer as time
 
 
@@ -39,8 +43,12 @@ PREVIEW_DIM = 256 # size of the preview image (pixels, square)
 # ProcessingFrame constants
 SAMPLE_DIM = 512
 
+# Processes vs Threads - essentially - bypasses the GIL vs ease of memory sharing
+# stackoverflow.com/questions/3044580/multiprocessing-vs-threading-python
+# processPool = ProcPool(processes=10)
 threadPool = futures.ThreadPoolExecutor(max_workers=10)
 threadResults = []
+multiKill = False # TODO implement threaded closure
 
 
 
@@ -215,6 +223,7 @@ class LoadFrame(Frame):
                                     (self.address.get() == ADDR_PLACEHOLDER) else None)
         lAdd.bind('<FocusOut>', lambda e: (self.address.set(ADDR_PLACEHOLDER) or self.clearPreviews())
                   if (self.address.get() == '') else self.loadVideo(self.address.get()))
+        self.lAdd = lAdd # TODO remove lol
 
         # file chooser button
         lChoose = Button(self, text='Choose Source', command=self.triggerVideoSelect)
@@ -307,6 +316,8 @@ class ProcessingFrame(Frame):
     def beginAnalysis(self, fname, maxDelta, deltaStep):
         startTime = time()
 
+        self.progressBar['mode'] = 'indeterminate'
+        self.progressBar.start()
         self.stage.set('Loading frames from disk')
         frames = readVideo(fname)
         print(f'frames: {len(frames)}')
@@ -322,35 +333,84 @@ class ProcessingFrame(Frame):
         # check shelving out if memory an issues
         # https://docs.python.org/3/library/shelve.html
 
-        print(frames[0].shape)
-        fours = numpy.array([twoDFourier(f) for f in frames])
+        if rRam: print('ram: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        # Configure UI display
+        self.stage.set('Calculating Fouriers')
+        self.progressBar.stop()
+        self.progressBar['mode'] = 'determinate'
+        self.progressBar['maximum'] = len(frames)
+        self.progress.set(0)
 
+
+
+        # Updates progressbar as Fourier transforms calculated
+        def fourierWrapper(frame):
+            r = twoDFourier(frame) # Find the transform for this frame
+            self.progress.set(self.progress.get()+1)
+            return r
+
+        # comprehension for all Fourier frames
+        a=time()
+        fours = [fourierWrapper(f) for f in frames]
+        print(f'fTime: {time()-a:.2f}')
+        self.stage.set('Optimising Fourier container')
+
+        # TODO remove
+        # import code
+        # code.interact(local=locals())
+
+        a=time()
+        if rRam: print('ram: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        # TODO this is a hella expensive op. Maybe just use as a list instead?
+        # if we don't multiprocess this, could just write straight into a blank ndarray
+        fours = numpy.stack(fours) # Numpy-fy
+        # stack() seems slightly faster than asarray()/asanyarray()
+        if rRam: print('ram: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        print(f'sTime: {time()-a}')
+
+
+
+        print(f'pre-diff-time: {time() - startTime:.2f}')
+        self.progressBar['maximum'] = len(deltas)
+        dTime=0
+        qTime=0
         for i, spacing in enumerate(deltas):
+            # Configure UI display
             self.stage.set(f'Processing Δ {i+1}/{len(deltas)}')
-            self.progress.set(100*i/len(deltas))
-            print(f'\tdelta={spacing}')
+            self.progress.set(i)
 
+
+            # Calculate unique data for this frame spacing/delta
+            a=time()          ###
 
             diff = frameDifferencer(fours, spacing)
-            # four = twoDFourier(diff)
+
+            dTime += time()-a ###
+            a=time()          ###
+
             q = calculateQCurves(diff)
+
+            qTime += time()-a ###
+
             curves.append(q)
 
 
+            # Add to the UI listbox
             self.results.insert('end', f'Δ = {spacing}')
-
             # Select this entry in the list if all other entries selected
             if (len(self.results.curselection()) == i):
                 self.results.select_set(i)
+        print(f'dTime: {dTime:.2f}')
+        print(f'qTime: {qTime:.2f}')
 
-        self.progress.set(100*(len(deltas)-0.5)/len(deltas))
+
+        self.progress.set(len(deltas)-0.5)
         self.stage.set('Forming correlation function')
         self.correlation = calculateCorrelation(curves)
-        print('cofunc:', self.correlation.shape)
+        print('cofunc size:', self.correlation.shape)
 
-        self.progress.set(100)
+        self.progress.set(len(deltas))
         self.stage.set('Done!')
-        print('Done')
 
         self.deltas = deltas
         self.curves = curves
@@ -362,8 +422,10 @@ class ProcessingFrame(Frame):
         # 100-frames
         #   naively:       4318268, 51.9s
         #   fourier first: 2683788, 13.6s
-        print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-        print(f'time: {time() - startTime:.2f}')
+        if rRam: print('ram: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        print(f'total time: {time() - startTime:.2f}')
+
+        return 'analysis complete'
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self):
@@ -378,8 +440,10 @@ class ProcessingFrame(Frame):
 
         # Split IO onto its own thread
         def save(self, fn):
-            numpy.savetxt(fn, self.correlation, delimiter='\t', fmt='%10.5f')
-            print('Saved to '+ fn)
+            target = self.correlation
+
+            numpy.savetxt(fn, target, delimiter='\t', fmt='%10.5f')
+            return f'saved {len(target)} rows to {fn}'
 
         startThread(save, self, filename)
 
@@ -423,6 +487,7 @@ class ProcessingFrame(Frame):
             self.progress.set(0)
             pBar = Progressbar(fProgress, mode='determinate', variable=self.progress)
             pBar.grid(row=1, column=0, sticky=[E, W])
+            self.progressBar = pBar
 
             # Yeah look I don't know why I need this, but otherwise there's a bunch of wasted space
             fProgress.columnconfigure(0, weight=10000)
@@ -494,12 +559,16 @@ if __name__ == '__main__':
     loader = LoadFrame(window)
     loader.grid()
 
+    # TODO delete lol
+    loader.address.set('../tests/data/10frames.avi')
+    loader.lAdd.event_generate("<FocusOut>", when="tail")
+    # TODO
 
     center(window) # set window location
     window.winfo_toplevel().title("quickDDM")
     window.resizable(False, False) # It's not really super responsive
 
-    with threadPool: # Ensure thread pool gets shutdown
+    with threadPool: # Ensure worker pools get shutdown
         def checkThreads(): # periodic poll to check for threaded errors
             [done, ndone] = futures.wait(threadResults, timeout=0, return_when=futures.FIRST_COMPLETED)
             for future in done:
@@ -509,6 +578,12 @@ if __name__ == '__main__':
             window.after(100, checkThreads)
         window.after(100, checkThreads)
 
+        def onQuit():
+            multiKill = True
+            # if askokcancel('Abort?', 'Are you sure you want to abort analysis?', default='cancel'):
+            window.destroy()
+
+        window.protocol("WM_DELETE_WINDOW", onQuit)
         window.mainloop() # hand control off to tkinter
 
 # TODO Think about splitting this into multiple files
