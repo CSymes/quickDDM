@@ -40,6 +40,7 @@ WINDOW_PADDING = 10 # pixels
 ADDR_PLACEHOLDER = 'Choose a file...' # Placeholder text for filepath entry box
 SCRUB_STEPS = 10 # previewable frames
 PREVIEW_DIM = 256 # size of the preview image (pixels, square)
+DEFAULT_SCALING = 10 # default scale factor (pixels/micron)
 # ProcessingFrame constants
 SAMPLE_DIM = 512
 
@@ -92,6 +93,7 @@ class LoadFrame(Frame):
             fps = videoFile.get(cv2.CAP_PROP_FPS)
             width = int(videoFile.get(cv2.CAP_PROP_FRAME_HEIGHT))
             height = int(videoFile.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.maxDelta = frames // 2 - 1 # TODO confirm desired max
 
             # Update the labels in the UI that show the metadata
             self.FPS.set(f'{fps:.1f}')
@@ -111,6 +113,13 @@ class LoadFrame(Frame):
 
             self.address.set(filename) # update the displayed filename
             self.load_button['state'] = 'normal' # activate processing button
+
+            self.spacing['state'] = 'normal' # activate metadata inputs
+            self.scaling['state'] = 'normal'
+            self.spacing.delete(0, 'end')
+            self.scaling.delete(0, 'end')
+            self.spacing.insert(0, self.maxDelta)
+            self.scaling.insert(0, DEFAULT_SCALING)
 
             self.video_file = videoFile
             self.handleScroll('moveto', '0.0') # Activate scrollbar, show preview
@@ -134,27 +143,59 @@ class LoadFrame(Frame):
         self.dim.set('')
         self.numFrames.set('')
         self.length.set('')
+        self.spacing.set('')
+        self.scaling.set('')
+
+        # Input/buttion disabling
+        self.load_button['state'] = 'disabled'
+        self.spacing['state'] = 'disabled'
+        self.scaling['state'] = 'disabled'
 
         self.scrub.set('0.0', '1.0') # Reset/disable scrollbar
         self.img_preview.delete('all') # Delete the image preview
         if self.video_file: # if necessary
             self.video_file.release() # release the previous video stream
-        self.video_file = None # and allow garbage collection
+        self.video_file = None # and allow deallocation
 
     """
     Click handler for analysis button
     Basically throws away the current window and creates a new Frame for the processing UI
     """
     def triggerAnalysis(self):
+        # Preserve values before destruction of this Frame
         win = self._nametowidget(self.winfo_parent())
         filename = self.address.get()
+        spacing = self.spacing.get()
+        scaling = self.scaling.get()
+
+        # Final stage of validation for user inputs
+        inputErrs = []
+        # Check spacing > 0
+        try:
+            spacing = int(spacing)
+            if spacing == 0: raise ValueError()
+            if spacing >= int(self.numFrames.get()): raise ValueError()
+        except ValueError:
+            inputErrs.append('Invalid maximum spacing size')
+
+        # Check scaling > 0
+        try:
+            scaling = int(scaling)
+            if scaling == 0: raise ValueError()
+        except ValueError:
+            inputErrs.append('Invalid physical scale')
+
+        # Show all errors
+        if inputErrs:
+            messagebox.showerror('Input Error', '\n'.join(inputErrs))
+            return # Break until they're corrected
 
         self.video_file.release()
         self.destroy()
         # The old has passed away...
 
         # ...behold, the new has come!
-        pframe = ProcessingFrame(win, filename)
+        pframe = ProcessingFrame(win, filename, spacing, scaling)
         pframe.grid()
 
     """Rips the frame at `index` out of the chosen video and shows in the preview pane"""
@@ -231,7 +272,7 @@ class LoadFrame(Frame):
 
         # metadata pane - contains all metadata labels added in the below block
         lMetadata = Frame(self, borderwidth=1, relief='solid')
-        lMetadata.grid(row = 1, column=0,
+        lMetadata.grid(row=1, column=0,
                        rowspan=2, columnspan=3,
                        sticky=[E, W, N, S],
                        pady=5)
@@ -242,23 +283,47 @@ class LoadFrame(Frame):
 
             # Descriptor labels
             mFPS = Label(lMetaSubframe, text='FPS: ')
-            mFPS.grid(row = 0, column=0, sticky=E)
+            mFPS.grid(row=0, column=0, sticky=E)
             mDim = Label(lMetaSubframe, text='Dimensions: ')
-            mDim.grid(row = 1, column=0, sticky=E)
+            mDim.grid(row=1, column=0, sticky=E)
             mFrames = Label(lMetaSubframe, text='# of Frames: ')
-            mFrames.grid(row = 2, column=0, sticky=E)
+            mFrames.grid(row=2, column=0, sticky=E)
             mLength = Label(lMetaSubframe, text='Video Length: ')
-            mLength.grid(row = 3, column=0, sticky=E)
+            mLength.grid(row=3, column=0, sticky=E)
 
             # Dynamic labels - get updated when video selected
             dFPS = Label(lMetaSubframe, textvariable=self.FPS)
-            dFPS.grid(row = 0, column=1, sticky=W)
+            dFPS.grid(row=0, column=1, sticky=W)
             dDim = Label(lMetaSubframe, textvariable=self.dim)
-            dDim.grid(row = 1, column=1, sticky=W)
+            dDim.grid(row=1, column=1, sticky=W)
             dFrames = Label(lMetaSubframe, textvariable=self.numFrames)
-            dFrames.grid(row = 2, column=1, sticky=W)
+            dFrames.grid(row=2, column=1, sticky=W)
             dLength = Label(lMetaSubframe, textvariable=self.length)
-            dLength.grid(row = 3, column=1, sticky=W)
+            dLength.grid(row=3, column=1, sticky=W)
+
+            lMetaSubframe.rowconfigure(4, minsize=10)
+
+
+
+            # Input validation
+            chkSpace = self.register(lambda P: ((P.isdigit() and int(P) < int(self.numFrames.get())) or P == ""))
+            chkScale = self.register(lambda P: (P.isdigit() or P == ""))
+
+            mlSpacing = Label(lMetaSubframe, text='Max. Spacing: ')
+            mlSpacing.grid(row=5, column=0, sticky=E)
+            mlScaling = Label(lMetaSubframe, text='Scale (pixels/μm): ')
+            mlScaling.grid(row=6, column=0, sticky=E)
+
+            self.spacing = Entry(lMetaSubframe, width=5, validate='all', validatecommand=(chkSpace, '%P'))
+            self.spacing.grid(row=5, column=1, sticky=W)
+            self.scaling = Entry(lMetaSubframe, width=5, validate='all', validatecommand=(chkScale, '%P'))
+            self.scaling.grid(row=6, column=1, sticky=W)
+
+            self.spacing['state'] = 'disabled'
+            self.scaling['state'] = 'disabled'
+
+            # TODO defaults (upper delta limit at least)
+            # TODO input verification
 
         # Button to progress to next stage
         lLoad = Button(self, text='Analyse Video', command=self.triggerAnalysis)
@@ -289,20 +354,19 @@ class LoadFrame(Frame):
 
 
 class ProcessingFrame(Frame):
-    def __init__(self, parent, fname):
+    def __init__(self, parent, fname, maxSpacing, scalingFactor):
         super().__init__(parent, padding=WINDOW_PADDING)
 
         self.populate()
         center(parent) # Update window dimensions/placement
 
         self.correlation = None
+        self.scalingFactor = scalingFactor # TODO factor this in
 
-        # TODO calc max delta
-        maxDelta = 4
         deltaStep = 1
 
         # Begin processing the video
-        startThread(self.beginAnalysis, fname, maxDelta, deltaStep)
+        startThread(self.beginAnalysis, fname, maxSpacing, deltaStep)
 
 
 
@@ -545,7 +609,7 @@ def center(win):
     h = win.winfo_height()
 
     # and move back onscreen at correct position
-    x = ((ww//2) - (w//2))
+    x = ((ww//2) - (w//4))
     y = ((wh//2) - (h//2))
 
 
