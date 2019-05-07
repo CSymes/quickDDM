@@ -40,4 +40,4 @@ def cumulativeTransformAndAverage(frames):
         averages += np.square(np.absolute(np.fft.fft2(frames[i,:,:])))
     #Taking the mean and normalising for size
     averages = (averages/scaling)/frames.shape[0]
-    return averages
+    return np.fft.fftshift(averages)
