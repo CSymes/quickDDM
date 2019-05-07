@@ -13,7 +13,11 @@ spacing: a single integer specifying the spacing between frames to subtract
 RETURN: list(array(frame order, y position, x position))
 """
 def frameDifferencer(videoFrames, spacing):
+    if len(videoFrames) <= spacing:
+        raise ValueError('Spacing delta too large for given frames')
+
     if videoFrames.dtype == np.uint8:
         videoFrames = videoFrames.astype(np.int16)
+
     differences = videoFrames[spacing:videoFrames.shape[0],:,:] - videoFrames[0:videoFrames.shape[0] - spacing,:,:]
     return differences

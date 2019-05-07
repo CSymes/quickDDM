@@ -1,28 +1,32 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
-trigger:
-- master
-
 pool:
   vmImage: 'windows-2019'
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
-
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
-
 # Use Python version 3.6
 - task: UsePythonVersion@0
   inputs:
     versionSpec: '3.6' 
     addToPath: true 
     architecture: 'x64'
+#- script: python --version
+- script: python -m pip install --upgrade pip setuptools wheel
+  displayName: 'Install tools'
+- script: |
+    pip install -r requirements.txt
+    pip install unittest-xml-reporting
+  displayName: 'Install requirements'
 
-- script: python --version
+- script: python -m xmlrunner discover tests -o /tmp/build/quickDDM-tests
+  displayName: 'Run all tests'
+
+- task: PublishTestResults@2
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFiles: '**/TEST-*.xml'
+    searchFolder: '/tmp/build/quickDDM-tests'
+    testRunTitle: 'Publish test results'
+
+- script: |
+    cp tests/data/10frames.avi tests/data/timing.avi
+    python timing.py
+  displayName: 'Run program timer'

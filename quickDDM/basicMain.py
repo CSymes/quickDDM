@@ -15,7 +15,7 @@ import calculateQCurves as cQC
 import calculateCorrelation as cC
 
 #starting with the simplest case, consecutive frame differences
-def differenceFirstMain(videoPath, spacings, outputPath = "None"):
+def differenceFirstMain(videoPath, spacings, outputPath = None):
     #spacings = np.array((13,14,15))
     correlations = []
     videoInput = rV.readVideo(videoPath)
@@ -25,12 +25,12 @@ def differenceFirstMain(videoPath, spacings, outputPath = "None"):
         qCurve = cQC.calculateQCurves(fourierSections)
         correlations.append(qCurve)
     correlations = cC.calculateCorrelation(correlations)
-    if outputPath != "None":
+    if outputPath is not None:
         with open(outputPath, "ab") as file:
             np.savetxt(file, correlations, delimiter = ' ')
     return correlations
 
-def transformFirstMain(videoPath, spacings, outputPath = "None"):
+def transformFirstMain(videoPath, spacings, outputPath = None):
     correlations = []
     videoInput = rV.readVideo(videoPath)
     fourierSections = np.fft.fft2(videoInput)
@@ -40,12 +40,12 @@ def transformFirstMain(videoPath, spacings, outputPath = "None"):
         qCurve = cQC.calculateQCurves(frameDifferences)
         correlations.append(qCurve)
     correlations = cC.calculateCorrelation(correlations)
-    if outputPath != "None":
+    if outputPath is not None:
         with open(outputPath, "ab") as file:
             np.savetxt(file, correlations, delimiter = ' ')
     return correlations
 
-def cumulativeDifferenceMain(videoPath, spacings, outputPath = "None"):
+def cumulativeDifferenceMain(videoPath, spacings, outputPath = None):
     #spacings = np.array((13,14,15))
     correlations = []
     videoInput = rV.readVideo(videoPath)
@@ -55,7 +55,11 @@ def cumulativeDifferenceMain(videoPath, spacings, outputPath = "None"):
         qCurve = cQC.calculateWithCalls(fourierMeans)
         correlations.append(qCurve)
     correlations = cC.calculateCorrelation(correlations)
-    if outputPath != "None":
+    if outputPath is not None:
         with open(outputPath, "ab") as file:
             np.savetxt(file, correlations, delimiter = ' ')
     return correlations
+
+
+if __name__ == '__main__':
+    differenceFirstMain(sys.argv[1], [1, 2, 3], sys.argv[2] if len(sys.argv) == 3 else None)
