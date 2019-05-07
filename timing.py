@@ -18,10 +18,38 @@ from collections import defaultdict
 import sys
 import os
 
+
+
+
 """
-Inserts a bunch of timing calls into basicMain.py and outputs the results
+Wraps all the module methods in timing calls and stores the wrapped
+functions in the system import list
 """
-def testTiming():
+def createWrappers(order, times):
+	def wrap(module, smod, sfunc, tname):
+		func = getattr(module, sfunc)
+		def wrapped_func(*args): # create a wrapper function
+			startTime = time() # take initial timestamp
+			r = func(*args) # call the real function with all given args
+			times[tname] += time() - startTime # store total time consumed
+			return r # transparently return
+		setattr(module, sfunc, wrapped_func) # overwrite the function in its module
+		sys.modules[smod] = module # and pre-"import" it for basicMain.py
+		# this is important, since basicMain doesn't know it's in the quickDDM namespace
+		order.append(tname) # keep track of function order
+
+	wrap(readVideo, 'readVideo', 'readVideo', 'Video Read')
+	wrap(frameDifferencer, 'frameDifferencer', 'frameDifferencer', 'Differencing')
+	wrap(twoDFourier, 'twoDFourier', 'twoDFourier', '2D Fourier (basic)')
+	wrap(twoDFourier, 'twoDFourier', 'cumulativeTransformAndAverage', '2D Fourier (cumulative)')
+	wrap(calculateQCurves, 'calculateQCurves', 'calculateQCurves', 'Q Curves')
+	wrap(calculateQCurves, 'calculateQCurves', 'calculateWithCalls', 'Q Curves (c with c)')
+	wrap(calculateCorrelation, 'calculateCorrelation', 'calculateCorrelation', 'Correlation')
+
+"""
+Calls the main function with wrapped module methods
+"""
+def testTiming(probe):
 	# You'll need to copy or link your choice of file for this to run on
 	filepath = 'tests/data/timing.avi'
 
@@ -29,89 +57,37 @@ def testTiming():
 		err = '\n\nCopy a file to time against to ./tests/data/time.avi'
 		raise FileNotFoundError(err)
 
-	print('All times given in seconds')
-	# Store times in a dict. This way it's interoperable with the loop in basicMain
-	times = defaultdict(float)
-
-
-
-	# TODO make a way to genericly perform this wrapping
-
-	#==========================================================#
-	r_rv = readVideo.readVideo # store reference to original function (real)
-	def m_rv(*args): # create a wrapper func (mocked)
-		startTime = time() # take initial timestamp
-		r = r_rv(*args) # call the real readVideo with all given args
-		times['read'] = time() - startTime # store total time consumed
-		print(f'readVideo:                {times["read"]:.5}') # print it as well
-		return r # transparently return
-	readVideo.readVideo = m_rv # overwrite the function in readVideo.py
-	sys.modules['readVideo'] = readVideo # and pre-"import" it for basicMain.py
-	# this is important, since basicMain doesn't know it's in the quickDDM namespace
-	#==========================================================#
-
-
-
-	#==========================================================#
-	r_fd = frameDifferencer.frameDifferencer
-	def m_fd(*args):
-		startTime = time()
-		r = r_fd(*args)
-		times['differencer'] += time() - startTime # ADD the time
-		return r
-	frameDifferencer.frameDifferencer = m_fd
-	sys.modules['frameDifferencer'] = frameDifferencer
-	#==========================================================#
-	r_2df = twoDFourier.twoDFourier
-	def m_2df(*args):
-		startTime = time()
-		r = r_2df(*args)
-		times['fourier'] += time() - startTime
-		return r
-	twoDFourier.twoDFourier = m_2df
-	sys.modules['twoDFourier'] = twoDFourier
-	#==========================================================#
-	r_qc = calculateQCurves.calculateQCurves
-	def m_qc(*args):
-		startTime = time()
-		r = r_qc(*args)
-		times['qcurves'] += time() - startTime
-		return r
-	calculateQCurves.calculateQCurves = m_qc
-	sys.modules['calculateQCurves'] = calculateQCurves
-	#==========================================================#
-
-
-
-	#==========================================================#
-	r_cc = calculateCorrelation.calculateCorrelation
-	def m_cc(*args):
-		printCumulativeResults(times) # Output results from timing the previous modules
-
-		startTime = time()
-		r = r_cc(*args)
-		times['correlate'] = time() - startTime
-		print(f'calculateCorrelation:     {times["correlate"]:.5}')
-		return r
-	calculateCorrelation.calculateCorrelation = m_cc
-	sys.modules['calculateCorrelation'] = calculateCorrelation
-	#==========================================================#
-
-
+	import quickDDM.basicMain
 
 	# Run the main program
-	sys.argv = ['basicMain.py', filepath]
-	import quickDDM.basicMain
+	exec(f'quickDDM.basicMain.{probe}("{filepath}", range(1, 5))')
 
 """
 Prints the stored times for the looped-over functions
 """
-def printCumulativeResults(times):
-	print(f'frameDifferencer (total): {times["differencer"]:.5}')
-	print(f'twoDFourier (total):      {times["fourier"]:.5}')
-	print(f'calculateQCurves (total): {times["qcurves"]:.5}')
+def printResults(order, times):
+	for k in order:
+		print(f'{k: <25}: {times[k]:.5}')
 
 
 
 if __name__ == '__main__':
-	testTiming()
+	mains = [
+		'transformFirstMain',
+		'differenceFirstMain',
+		'cumulativeDifferenceMain'
+	]
+
+	print('All times given in seconds')
+
+	# Store times in a dict. This way it's interoperable with the loops
+	# in basicMain, as well as order agnostic
+	times = defaultdict(float)
+	order = []
+	createWrappers(order, times)
+
+	for f in mains:
+		times.clear()
+		print(f'  Timing {f}()')
+		testTiming(f)
+		printResults(order, times) # Output remaining results
