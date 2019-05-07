@@ -1,12 +1,19 @@
+strategy:
+  matrix:
+    win2016:
+      imageName: 'vs2017-win2016'
+    # linux:
+      # imageName: 'ubuntu-16.04'
+
 pool:
-  vmImage: 'windows-2019'
+  vmImage: $(imageName)
 
 steps:
 # Use Python version 3.6
 - task: UsePythonVersion@0
   inputs:
-    versionSpec: '3.6' 
-    addToPath: true 
+    versionSpec: '3.6'
+    addToPath: true
     architecture: 'x64'
 #- script: python --version
 - script: python -m pip install --upgrade pip setuptools wheel
