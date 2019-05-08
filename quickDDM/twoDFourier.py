@@ -42,7 +42,8 @@ def cumulativeTransformAndAverage(frames):
 
 """
 This version havles memory requirements by using rfft. However, this changes
-the dimensionality of the result, which will cause 
+the dimensionality of the result, which means that the "real" versions of 
+calculate q curves must be used as well after this. Also changes fftshift needs
 framesArray: a 3d array formatted as [frame order, y position, x position]
 RETURN: [frameSquence, inverse y, inverse x]
 Note that the inverse x axis is half the length of the original
@@ -54,3 +55,19 @@ def realTwoDFourier(framesArray):
     #Can't use default normalise because it is now half size
     framesArray = np.fft.fftshift(np.fft.rfft2(framesArray), axes = (-2,))
     return np.square(np.absolute(framesArray))/scaling
+
+    
+def cumulativeTransformAndAverageReal(frames):
+    scaling = (frames.shape[1] * frames.shape[2]) ^ 2
+    if frames.shape[2] % 2 == 0:
+        transformShape = (frames.shape[0],frames.shape[1],frames.shape[2]//2 + 1)
+    else:
+        transformShape = (frames.shape[0],frames.shape[1],(frames.shape[2]+1)//2)
+    averages = np.zeros(transformShape)#Same spatial shape, no time
+    for i in range(0,frames.shape[0]):
+        #Only the first axis needs shifting. Only two, and the second is being halved
+        current = np.fft.fftshift(np.fft.rfft2(frames[i,:,:]), axes = (0,))
+        averages += np.square(np.absolute(current))
+    #Taking the mean and normalising for size
+    averages = (averages/scaling)/frames.shape[0]
+    return averages

@@ -50,7 +50,8 @@ fourierDifferences: a complex array, (time, y, x)
 RETURN: a 1d intensity array, at increasing radii
 """
 def calculateRealQCurves(fourierDifferences):
-    averages = np.mean(fourierDifferences, axis = 0)
+    if len(fourierDifferences.shape) == 3:
+        averages = np.mean(fourierDifferences, axis = 0)
     ySize = fourierDifferences.shape[1]
     xSize = fourierDifferences.shape[2]
     #For now, it is just mimicing the provided MATLAB, which isn't ideal, but sue me.

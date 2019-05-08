@@ -46,7 +46,6 @@ def transformFirstMain(videoPath, spacings, outputPath = None):
     return correlations
 
 def cumulativeDifferenceMain(videoPath, spacings, outputPath = None):
-    #spacings = np.array((13,14,15))
     correlations = []
     videoInput = rV.readVideo(videoPath)
     for spacing in spacings:
@@ -60,7 +59,7 @@ def cumulativeDifferenceMain(videoPath, spacings, outputPath = None):
             np.savetxt(file, correlations, delimiter = ' ')
     return correlations
 
-def realDifferenceMain(videoPath, spacings):
+def realDifferenceMain(videoPath, spacings, outputPath = None):
     correlations = []
     videoInput = rV.readVideo(videoPath)
     for spacing in spacings:
@@ -74,12 +73,27 @@ def realDifferenceMain(videoPath, spacings):
 def realTransformMain(videoPath, spacings, outputPath = None):
     correlations = []
     videoInput = rV.readVideo(videoPath)
-    fourierSections = np.fft.fftshift(np.fft.rfft2(videoInput), axes = (-2,))
+    scaling = (videoInput.shape[1] * videoInput.shape[2]) ^ 2
+    fourierSections = np.fft.fftshift(np.fft.rfft2(videoInput), axes = (1,))
     for spacing in spacings:
         frameDifferences = fD.frameDifferencer(fourierSections, spacing)
         #At the moment this will normalise incorrectly, but that is ok for timing tests
-        frameDifferences = tDF.normaliseFourier(frameDifferences)
-        qCurve = cQC.calculateQCurves(frameDifferences)
+        frameDifferences = np.square(np.absolute(frameDifferences))/scaling
+        qCurve = cQC.calculateRealQCurves(frameDifferences)
+        correlations.append(qCurve)
+    correlations = cC.calculateCorrelation(correlations)
+    if outputPath is not None:
+        with open(outputPath, "ab") as file:
+            np.savetxt(file, correlations, delimiter = ' ')
+    return correlations
+
+def realAccumulateMain(videoPath, spacings, outputPath = None):
+    correlations = []
+    videoInput = rV.readVideo(videoPath)
+    for spacing in spacings:
+        frameDifferences = fD.frameDifferencer(videoInput, spacing)
+        fourierMeans = tDF.cumulativeTransformAndAverageReal(frameDifferences)
+        qCurve = cQC.calculateRealQCurves(fourierMeans)
         correlations.append(qCurve)
     correlations = cC.calculateCorrelation(correlations)
     if outputPath is not None:
