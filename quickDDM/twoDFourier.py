@@ -17,7 +17,7 @@ def twoDFourier(framesArray):
     #TODO: it is possible we can halve the size of the complex data by using rfft2
     #link: https://stackoverflow.com/questions/52387673/what-is-the-difference-between-numpy-fft-fft-and-numpy-fft-rfft/52388007
     #will need to test it thouroughly though
-    framesArray = np.fft.fftshift(np.fft.fft2(framesArray))
+    framesArray = np.fft.fftshift(np.fft.fft2(framesArray), axes = (1,2))
     return normaliseFourier(framesArray)
 
 def normaliseFourier(frames):
@@ -40,4 +40,4 @@ def cumulativeTransformAndAverage(frames):
         averages += np.square(np.absolute(np.fft.fft2(frames[i,:,:])))
     #Taking the mean and normalising for size
     averages = (averages/scaling)/frames.shape[0]
-    return np.fft.fftshift(averages)
+    return np.fft.fftshift(averages, axes = (1,2))

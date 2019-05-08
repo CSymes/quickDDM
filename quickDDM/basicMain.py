@@ -33,7 +33,7 @@ def differenceFirstMain(videoPath, spacings, outputPath = None):
 def transformFirstMain(videoPath, spacings, outputPath = None):
     correlations = []
     videoInput = rV.readVideo(videoPath)
-    fourierSections = np.fft.fft2(videoInput)
+    fourierSections = np.fft.fftshift(np.fft.fft2(videoInput), axes = (1,2))
     for spacing in spacings:
         frameDifferences = fD.frameDifferencer(fourierSections, spacing)
         frameDifferences = tDF.normaliseFourier(frameDifferences)
