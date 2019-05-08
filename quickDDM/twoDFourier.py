@@ -10,7 +10,7 @@ As of hotfix01, all variants should be updated to have an fftshift
 
 """
 framesArray: a 3d array formatted as [frame order, y position, x position]
-RETURN: [frameSquence, inverse y, inverse x], complex
+RETURN: [frameSquence, inverse y, inverse x]
 """
 import numpy as np
 def twoDFourier(framesArray):
@@ -37,7 +37,8 @@ def cumulativeTransformAndAverage(frames):
     scaling = (frames.shape[1] * frames.shape[2]) ^ 2
     averages = np.zeros(frames.shape[1:3])#Same spatial shape, no time
     for i in range(0,frames.shape[0]):
-        averages += np.square(np.absolute(np.fft.fft2(frames[i,:,:])))
+        #Don't have to worry about the axes here, since there is no time here
+        averages += np.square(np.absolute(np.fft.fftshift(np.fft.fft2(frames[i,:,:]))))
     #Taking the mean and normalising for size
     averages = (averages/scaling)/frames.shape[0]
-    return np.fft.fftshift(averages, axes = (1,2))
+    return averages
