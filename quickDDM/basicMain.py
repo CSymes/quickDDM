@@ -60,6 +60,32 @@ def cumulativeDifferenceMain(videoPath, spacings, outputPath = None):
             np.savetxt(file, correlations, delimiter = ' ')
     return correlations
 
+def realDifferenceMain(videoPath, spacings):
+    correlations = []
+    videoInput = rV.readVideo(videoPath)
+    for spacing in spacings:
+        frameDifferences = fD.frameDifferencer(videoInput, spacing)
+        fourierSections = tDF.realTwoDFourier(frameDifferences)
+        qCurve = cQC.calculateRealQCurves(fourierSections)
+        correlations.append(qCurve)
+    correlations = cC.calculateCorrelation(correlations)
+    return correlations
+
+def realTransformMain(videoPath, spacings, outputPath = None):
+    correlations = []
+    videoInput = rV.readVideo(videoPath)
+    fourierSections = np.fft.fftshift(np.fft.rfft2(videoInput), axes = (-2,))
+    for spacing in spacings:
+        frameDifferences = fD.frameDifferencer(fourierSections, spacing)
+        #At the moment this will normalise incorrectly, but that is ok for timing tests
+        frameDifferences = tDF.normaliseFourier(frameDifferences)
+        qCurve = cQC.calculateQCurves(frameDifferences)
+        correlations.append(qCurve)
+    correlations = cC.calculateCorrelation(correlations)
+    if outputPath is not None:
+        with open(outputPath, "ab") as file:
+            np.savetxt(file, correlations, delimiter = ' ')
+    return correlations
 
 if __name__ == '__main__':
     differenceFirstMain(sys.argv[1], [1, 2, 3], sys.argv[2] if len(sys.argv) == 3 else None)

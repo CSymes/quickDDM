@@ -14,9 +14,6 @@ RETURN: [frameSquence, inverse y, inverse x], complex
 """
 import numpy as np
 def twoDFourier(framesArray):
-    #TODO: it is possible we can halve the size of the complex data by using rfft2
-    #link: https://stackoverflow.com/questions/52387673/what-is-the-difference-between-numpy-fft-fft-and-numpy-fft-rfft/52388007
-    #will need to test it thouroughly though
     framesArray = np.fft.fftshift(np.fft.fft2(framesArray))
     return normaliseFourier(framesArray)
 
@@ -41,3 +38,18 @@ def cumulativeTransformAndAverage(frames):
     #Taking the mean and normalising for size
     averages = (averages/scaling)/frames.shape[0]
     return np.fft.fftshift(averages)
+
+"""
+This version havles memory requirements by using rfft. However, this changes
+the dimensionality of the result, which will cause 
+framesArray: a 3d array formatted as [frame order, y position, x position]
+RETURN: [frameSquence, inverse y, inverse x], complex
+Note that the inverse x axis is half the length of the original
+Theory link:  https://stackoverflow.com/questions/52387673/what-is-the-difference-between-numpy-fft-fft-and-numpy-fft-rfft/52388007
+"""
+def realTwoDFourier(framesArray):
+    
+    scaling = (framesArray.shape[1] * framesArray.shape[2]) ^ 2
+    #Can't use default normalise because it is now half size
+    framesArray = np.fft.fftshift(np.fft.rfft2(framesArray), axes = (-2,))
+    return np.square(np.absolute(framesArray))/scaling
