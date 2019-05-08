@@ -55,7 +55,6 @@ def calculateWithCalls(fourierDifferences):
 
 def averagesLoop(absolutes):
     averages = np.mean(absolutes, axis = 0)
-    #TODO: consider supression of center values
     return averages
 
 def generateGrid(dims):
@@ -64,11 +63,14 @@ def generateGrid(dims):
     xGrid, yGrid = np.meshgrid(xRange,yRange)
     #This hot mess gets the radial values as integers, with appropriate rounding
     radiusGrid = np.around(np.sqrt(np.square(yGrid) + np.square(xGrid)),0).astype(np.int16)
+    #Removing the centre values
+    radiusGrid[:,dims[0]//2] = -1
+    radiusGrid[dims[1]//2,:] = -1
+    
     return radiusGrid
 
 def takeCurves(averages, radiusGrid):
-    r = 0;
-    i = 0;
+    r = 1;
     qCurves = np.zeros(averages.shape[0]//2)
     while(r < averages.shape[0]/2):
         pickGrid = radiusGrid == r
