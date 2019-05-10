@@ -127,6 +127,13 @@ def fitCorrelationsToFunction(correlations, qValues, fitting, weighting = ("line
         "rising exponential":risingExponential,
         "linear":linearFunction
     }
+    
+    #Add more initial estimates here as required
+    if fitting == "rising exponential":
+        guess = (np.max(correlations) - np.min(correlations), np.min(correlations), 0.3)
+    else :
+        guess = None
+    
     weightingSchemes ={
         #More can be added here as required
         "linear": linearSpacing,
@@ -145,7 +152,7 @@ def fitCorrelationsToFunction(correlations, qValues, fitting, weighting = ("line
         #initial one with all samples
         torVector = scheme(correlations[:,q], weighting[1])
         torCurve = correlations[torVector,q]
-        popt, pcov = scipy.optimize.curve_fit(fittingFunctions[fitting], torVector, torCurve)
+        popt, pcov = scipy.optimize.curve_fit(fittingFunctions[fitting], torVector, torCurve, p0 = guess)
         paramResults[q] = popt
     
     return (paramResults, qValues, fittingFunctions[fitting])
@@ -166,6 +173,7 @@ def plotCurveComparisonsLinear(correlations, fittingResult, qIndicies):
     plt.ylabel('\u0394(\u03B4t)')
     plt.xlabel('\u03B4t (Frames)')
     plt.legend()
+    plt.title("Linearly Scaled Correlations")
     plt.show()
     
 def plotCurveComparisonsLog(correlations, fittingResult, qIndicies):
@@ -192,6 +200,7 @@ def plotCurveComparisonsLog(correlations, fittingResult, qIndicies):
     xmin, xmax, ymin, ymax = plt.axis()
     plt.axis([0.01, xmax, ymin, ymax])
     plt.legend()
+    plt.title("Logarithmically Scaled Correlations")
     plt.show()
 
 """
