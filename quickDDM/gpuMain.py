@@ -11,10 +11,9 @@ Main function, running on a GPU using Reikna/PyOpenCL
 import sys
 import numpy
 
-import pyopencl as cl
+from pyopencl._cl import LogicError
 import reikna.cluda as cluda
 from reikna.fft import FFT
-import arrayfire as af
 
 from timeit import default_timer as time
 
@@ -39,7 +38,11 @@ if __name__ == '__main__':
 
     # Create access node for OpenCL
     api = cluda.ocl_api()
-    thr = api.Thread.create()
+    try:
+        thr = api.Thread.create()
+    except LogicError:
+        print('No OpenCL-compatible devices (e.g. GPUs) found', file=sys.stderr)
+        exit()
 
     # Display accessible devices
     for plat in api.get_platforms():
