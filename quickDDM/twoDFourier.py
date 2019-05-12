@@ -8,16 +8,17 @@ As of hotfix01, all variants should be updated to have an fftshift
 @author: Lionel
 """
 
+import numpy as np
+
 """
 framesArray: a 3d array formatted as [frame order, y position, x position]
 RETURN: [frameSquence, inverse y, inverse x], complex
 """
-import numpy as np
 def twoDFourier(framesArray):
     #TODO: it is possible we can halve the size of the complex data by using rfft2
     #link: https://stackoverflow.com/questions/52387673/what-is-the-difference-between-numpy-fft-fft-and-numpy-fft-rfft/52388007
     #will need to test it thouroughly though
-    framesArray = np.fft.fftshift(np.fft.fft2(framesArray))
+    framesArray = np.fft.fftshift(np.fft.fft2(framesArray), axes = (1,2))
     return normaliseFourier(framesArray)
 
 def normaliseFourier(frames):
@@ -26,7 +27,6 @@ def normaliseFourier(frames):
     normalised = np.square(np.absolute(frames))/scaling
     return normalised
 
-    
 """
 Attempt at decreasing memory demands by taking the average in the same action
 as the absolute value, to never have a full complex array in memory

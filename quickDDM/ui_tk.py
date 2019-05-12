@@ -409,11 +409,12 @@ class ProcessingFrame(Frame):
 
         # Updates progressbar as Fourier transforms calculated
         def fourierWrapper(frame):
-            r = twoDFourier(frame) # Find the transform for this frame
+            r = twoDFourier(numpy.asarray([frame])) # Find the transform for this frame
             self.progress.set(self.progress.get()+1)
-            return r
+            return r[0]
 
         # comprehension for all Fourier frames
+        # calculating on a per-frame basis seems not to really be any more expensive
         a=time()
         fours = [fourierWrapper(f) for f in frames]
         print(f'fTime: {time()-a:.2f}')
@@ -624,7 +625,7 @@ if __name__ == '__main__':
     loader.grid()
 
     # TODO delete lol
-    loader.address.set('../tests/data/10frames.avi')
+    loader.address.set('../tests/data/sliver.avi')
     loader.lAdd.event_generate("<FocusOut>", when="tail")
     # TODO
 
