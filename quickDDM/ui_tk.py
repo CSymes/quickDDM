@@ -90,13 +90,13 @@ class LoadFrame(Frame):
         if videoFile.isOpened():
             # ...including all its metadata, thankfully
             frames = int(videoFile.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps = videoFile.get(cv2.CAP_PROP_FPS)
+            fps = int(videoFile.get(cv2.CAP_PROP_FPS))
             width = int(videoFile.get(cv2.CAP_PROP_FRAME_HEIGHT))
             height = int(videoFile.get(cv2.CAP_PROP_FRAME_WIDTH))
             self.maxDelta = frames // 2 - 1 # TODO confirm desired max
 
             # Update the labels in the UI that show the metadata
-            self.FPS.set(f'{fps:.1f}')
+            self.FPS.set(f'{fps}')
             self.dim.set(f'{width}x{height} pixels')
             self.numFrames.set(f'{frames}')
 
@@ -167,6 +167,8 @@ class LoadFrame(Frame):
         filename = self.address.get()
         spacing = self.spacing.get()
         scaling = self.scaling.get()
+        fps = float(self.FPS.get())
+        frames = int(self.numFrames.get())
 
         # Final stage of validation for user inputs
         inputErrs = []
@@ -195,7 +197,7 @@ class LoadFrame(Frame):
         # The old has passed away...
 
         # ...behold, the new has come!
-        pframe = ProcessingFrame(win, filename, spacing, scaling)
+        pframe = ProcessingFrame(win, filename, fps, frames, spacing, scaling)
         pframe.grid()
 
     """Rips the frame at `index` out of the chosen video and shows in the preview pane"""
@@ -354,7 +356,7 @@ class LoadFrame(Frame):
 
 
 class ProcessingFrame(Frame):
-    def __init__(self, parent, fname, maxSpacing, scalingFactor):
+    def __init__(self, parent, fname, fps, numFrames, maxDelta, scalingFactor):
         super().__init__(parent, padding=WINDOW_PADDING)
 
         self.populate()
@@ -362,11 +364,15 @@ class ProcessingFrame(Frame):
 
         self.correlation = None
         self.scalingFactor = scalingFactor # TODO factor this in
+        self.fps = fps
+        self.numFrames = numFrames
 
         deltaStep = 1
+        # list of frame deltas to analyse
+        deltas = range(1, maxDelta+1, deltaStep)
 
         # Begin processing the video
-        startThread(self.beginAnalysis, fname, maxSpacing, deltaStep)
+        startThread(self.beginAnalysis, fname, deltas)
 
 
 
@@ -377,7 +383,7 @@ class ProcessingFrame(Frame):
     Begin the video analysis - see basicMain.py
     Threaded away from the UI
     """
-    def beginAnalysis(self, fname, maxDelta, deltaStep):
+    def beginAnalysis(self, fname, deltas):
         startTime = time()
 
         self.progressBar['mode'] = 'indeterminate'
@@ -386,10 +392,8 @@ class ProcessingFrame(Frame):
         frames = readVideo(fname)
         print(f'frames: {len(frames)}')
 
-        # list of frame deltas to analyse
-        deltas = range(1, maxDelta+1, deltaStep)
         print(f'# of deltas: {len(deltas)}')
-        curves = [] # store processed data
+        curves = numpy.zeros((len(deltas), len(frames[0])//2)) # store processed data
 
         # TODO test multiprocessing the deltas
         # https://stackoverflow.com/questions/659865/multiprocessing-sharing-a-large-read-only-object-between-processes
@@ -397,7 +401,7 @@ class ProcessingFrame(Frame):
         # check shelving out if memory an issues
         # https://docs.python.org/3/library/shelve.html
 
-        if rRam: print('ram: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         # Configure UI display
         self.stage.set('Calculating Fouriers')
         self.progressBar.stop()
@@ -409,6 +413,7 @@ class ProcessingFrame(Frame):
 
         # Updates progressbar as Fourier transforms calculated
         def fourierWrapper(frame):
+            # pass a single-item list of frames
             r = twoDFourier(numpy.asarray([frame])) # Find the transform for this frame
             self.progress.set(self.progress.get()+1)
             return r[0]
@@ -420,17 +425,21 @@ class ProcessingFrame(Frame):
         print(f'fTime: {time()-a:.2f}')
         self.stage.set('Optimising Fourier container')
 
+        # print(frames[0])
+        # print(fours[0])
+        # exit()
+
         # TODO remove
         # import code
         # code.interact(local=locals())
 
         a=time()
-        if rRam: print('ram: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         # TODO this is a hella expensive op. Maybe just use as a list instead?
         # if we don't multiprocess this, could just write straight into a blank ndarray
         fours = numpy.stack(fours) # Numpy-fy
         # stack() seems slightly faster than asarray()/asanyarray()
-        if rRam: print('ram: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         print(f'sTime: {time()-a}')
 
 
@@ -457,7 +466,7 @@ class ProcessingFrame(Frame):
 
             qTime += time()-a ###
 
-            curves.append(q)
+            curves[i] = q
 
 
             # Add to the UI listbox
@@ -472,7 +481,8 @@ class ProcessingFrame(Frame):
         self.progress.set(len(deltas)-0.5)
         self.stage.set('Forming correlation function')
         self.correlation = calculateCorrelation(curves)
-        print('cofunc size:', self.correlation.shape)
+        print(f'curves size: {curves.shape}')
+        print(f'cofunc size: {self.correlation.shape}')
 
         self.progress.set(len(deltas))
         self.stage.set('Done!')
@@ -487,7 +497,7 @@ class ProcessingFrame(Frame):
         # 100-frames
         #   naively:       4318268, 51.9s
         #   fourier first: 2683788, 13.6s
-        if rRam: print('ram: ', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         print(f'total time: {time() - startTime:.2f}')
 
         return 'analysis complete'
@@ -506,8 +516,10 @@ class ProcessingFrame(Frame):
         # Split IO onto its own thread
         def save(self, fn):
             target = self.correlation
+            d = numpy.array([x/self.fps for x in self.deltas])
+            target = numpy.hstack((d[:, None], target))
 
-            numpy.savetxt(fn, target, delimiter='\t', fmt='%10.5f')
+            numpy.savetxt(fn, target, delimiter='\t', fmt='%.5f')
             return f'saved {len(target)} rows to {fn}'
 
         startThread(save, self, filename)
@@ -625,7 +637,7 @@ if __name__ == '__main__':
     loader.grid()
 
     # TODO delete lol
-    loader.address.set('../tests/data/sliver.avi')
+    loader.address.set('../tests/data/10frames.avi')
     loader.lAdd.event_generate("<FocusOut>", when="tail")
     # TODO
 

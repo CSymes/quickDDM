@@ -7,6 +7,8 @@ This is the most basic way of running the process. It will call each part
 of the process in turn, chaining them together.
 @author: Lionel
 """
+
+import sys
 import numpy as np
 import readVideo as rV
 import frameDifferencer as fD
@@ -62,4 +64,4 @@ def cumulativeDifferenceMain(videoPath, spacings, outputPath = None):
 
 
 if __name__ == '__main__':
-    differenceFirstMain(sys.argv[1], [1, 2, 3], sys.argv[2] if len(sys.argv) == 3 else None)
+    differenceFirstMain(sys.argv[1], [1, 2, 3, 4], sys.argv[2] if len(sys.argv) == 3 else None)
