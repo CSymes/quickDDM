@@ -1,4 +1,4 @@
-f = '10frames.avi';
+f = 'small.avi';
 outputFileName = 'out.tif';
 
 img = read(VideoReader(f));
