@@ -60,9 +60,9 @@ def realTwoDFourier(framesArray):
 def cumulativeTransformAndAverageReal(frames):
     scaling = (frames.shape[1] * frames.shape[2]) ^ 2
     if frames.shape[2] % 2 == 0:
-        transformShape = (frames.shape[0],frames.shape[1],frames.shape[2]//2 + 1)
+        transformShape = (frames.shape[1],frames.shape[2]//2 + 1)
     else:
-        transformShape = (frames.shape[0],frames.shape[1],(frames.shape[2]+1)//2)
+        transformShape = (frames.shape[1],(frames.shape[2]+1)//2)
     averages = np.zeros(transformShape)#Same spatial shape, no time
     for i in range(0,frames.shape[0]):
         #Only the first axis needs shifting. Only two, and the second is being halved

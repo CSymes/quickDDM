@@ -52,8 +52,11 @@ RETURN: a 1d intensity array, at increasing radii
 def calculateRealQCurves(fourierDifferences):
     if len(fourierDifferences.shape) == 3:
         averages = np.mean(fourierDifferences, axis = 0)
-    ySize = fourierDifferences.shape[1]
-    xSize = fourierDifferences.shape[2]
+    else:
+        averages = fourierDifferences
+    #last and second last dimensions
+    ySize = fourierDifferences.shape[-2]
+    xSize = fourierDifferences.shape[-1]
     #For now, it is just mimicing the provided MATLAB, which isn't ideal, but sue me.
     yRange = np.arange(-ySize/2.0,ySize/2.0, dtype = np.int32)
     xRange = np.arange(0,xSize, dtype = np.int32)
