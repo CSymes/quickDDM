@@ -21,6 +21,7 @@ required, create a lambda using the function with an appropriate signature
 They must return a single floating point value.
 """
 
+
 #A simple one expected for pure diffusion in some circumstances, from:
 #Differential Dynamic Microscopy of Bacterial Motility
 #Wilson et al
@@ -32,19 +33,6 @@ def diffusionFunction(tor, q, D):
 #Useable as an ultra-simple test case.
 def linearFunction(tor, m, c):
     return tor*m + c
-
-#For the formula used, please see:
-#Differential Dynamic Microscopy of Bacterial Motility
-#Wilson et al
-#Published 5-JAN-2011
-#This one is an absolute disaster with the provided file, so it isn't used now
-#Note that this requires using a lambda to fix q to the needed value
-def motilityFunction(tor, q, Z, alpha, vMean, D):
-    theta = (q*tor*vMean)/(Z + 1)
-    expTerm = np.exp(-D*(pow(q,2))*tor)
-    velocityDistZTerm = (Z+1)/(Z*q*vMean*tor)
-    velocitySineTerm = (np.sin(Z*np.arctan(theta)))/pow(1+theta,Z/2)
-    return expTerm * ((alpha - 1) + alpha * velocityDistZTerm * velocitySineTerm)
     
 #Mimicing what is used in "Characterizing Concentraded, Multiply Scattering..."
 #This one matches the provided experiment01 file quite well
@@ -53,6 +41,15 @@ def risingExponential(deltaT, A, B, otherTor):
     g = np.exp(-deltaT/otherTor)
     return 2*A*(1-g)+B
    
+"""
+This is the dictionary from which to access fitting functions. Modify this here
+whenever a new weighting scheme is added. DO NOT modify this during execution.
+"""
+fittingFunctions ={
+    "diffusion":diffusionFunction,
+    "rising exponential":risingExponential,
+    "linear":linearFunction
+}
    
 """
 These functions are used to create tor vectors to downsample the provided
@@ -60,7 +57,8 @@ correlation curve. They take parameters of
 (correlationCurve, sampleParams)
 where correlationCurve is a single vector from the correlation function and 
 sampleParams is a tuple of floats that serve as the parameters of the function
-
+RETURN: a vector of integers from 1 to some values less than 
+len(correlationCurve), that may be used to index correlationCurve.
 available weighting schemes:
     linear: takes linearly spaced samples. One param, the spacing desired,
     should be >= 1 to avoid repeated elements.
@@ -80,6 +78,7 @@ Not yet implemented:
     averagingexp: uses a moving average filter for points past the 
     first ten to mitigate noise, then samples exponentially
 """
+
 def linearSpacing(correlationCurve, sampleParams):
     spacing = sampleParams[0]
     return np.arange(1,len(correlationCurve), spacing).astype(int)
@@ -101,6 +100,22 @@ def percentileSpacing(correlationCurve, sampleParams):
     lastIndex = exceedingElements[0][0]
     torVector = np.arange(1,lastIndex).astype(int)
     return torVector
+    
+"""
+This is the dictionary from which to access weighting schemes. Modify this here
+whenever a new weighting scheme is added. DO NOT modify this during execution.
+"""
+WEIGHTING_SCHEMES ={
+    #More can be added here as required
+    "linear": linearSpacing,
+    "log": expSpacing,
+    "percentile": percentileSpacing
+    #These can be added later if desired
+    #"%rise": ,
+    #"hardcutoff":,
+    #"averagingexp":
+}
+
 """
 Extracts all fitting parameters from the correlations at the specified q
 values, with the specified fitting.
@@ -114,42 +129,19 @@ the correlations list that maps to that particular result's q value, and
 function is the function it fitted to.
 Values are populated to the indicies matching the Q values, all others are None
 The exception being the q indicies themselves
+#TODO: named tuples
 """
 def fitCorrelationsToFunction(correlations, qValues, fitting, weighting = ("linear", (1,))):
     paramResults = [None] * correlations.shape[1]
-    #Extend this as required if more functions are wanted
-    fittingFunctions ={
-        "diffusion":diffusionFunction,
-        #This sort of lambda is used to hide variables from the fitting,
-        #mostly if the function is dependent on Q
-        #currently doesn't work with logarithmic plotting
-        #"motility":lambda tor, Z, alpha, vMean, D: motilityFunction(tor, correctedQ, Z, alpha, vMean, D),
-        "rising exponential":risingExponential,
-        "linear":linearFunction
-    }
-    
-    #Add more initial estimates here as required
+    #TODO: correct to use real dimensions
+    #TODO: make a new tool for estimating initial values
     if fitting == "rising exponential":
         guess = (np.max(correlations) - np.min(correlations), np.min(correlations), 0.3)
     else :
         guess = None
     
-    weightingSchemes ={
-        #More can be added here as required
-        "linear": linearSpacing,
-        "log": expSpacing,
-        "percentile": percentileSpacing
-        #These can be added later if desired
-        #"%rise": ,
-        #"hardcutoff":,
-        #"averagingexp":
-    }
-    scheme = weightingSchemes[weighting[0]]
+    scheme = WEIGHTING_SCHEMES[weighting[0]]
     for q in qValues:
-        #TODO: this can usefully be adjusted to use real dimensions
-        #Only used in the motility function
-        #correctedQ = q*np.pi/1024.0
-        #initial one with all samples
         torVector = scheme(correlations[:,q], weighting[1])
         torCurve = correlations[torVector,q]
         popt, pcov = scipy.optimize.curve_fit(fittingFunctions[fitting], torVector, torCurve, p0 = guess)
@@ -203,47 +195,21 @@ def plotCurveComparisonsLog(correlations, fittingResult, qIndicies):
     plt.title("Logarithmically Scaled Correlations")
     plt.show()
 
-"""
-These 
-def fitRisingWithClipping(correlations, qValues):
-    paramResults = [None] * correlations.shape[1]
+def generateFittedCurves(fittingResult, startTor, endTor, stepTor):
+    fitParams = fittingResult[0]
+    qValues = fittingResult[1]
+    fitFunction = fittingResult[2]
+    torVector = np.arange(startTor, endTor + stepTor, stepTor)
+    curves = []
     for q in qValues:
-        #TODO: this can usefully be adjusted to use real dimensions
-        #Only used in the motility function
-        #correctedQ = q*np.pi/1024.0
-        torCurve = correlations[:,q]
-        medianIntensity = np.median(torCurve)
-        exceedingElements = np.where(torCurve > medianIntensity)
-        torCurve = torCurve[1:exceedingElements[0][0]]
-        
-        torVector = np.arange(1,len(torCurve)+1)
-        popt, pcov = scipy.optimize.curve_fit(risingExponential, torVector, torCurve)
-        paramResults[q] = popt
-        #This * operator is a python-y thing that extracts a tuple into arguments
-        currentCurve = risingExponential(torVector, *popt)
+        if fitParams[q] is None:
+            continue
+        fitCurve = fitFunction(torVector, *fitParams[q])
+        curves.append(fitCurve)
+    return curves
     
-    return (paramResults)
-
-def fitRisingWithLogSpacing(correlations, qValues):
-    paramResults = [None] * correlations.shape[1]
-    for q in qValues:
-        #Because we always want the first ten values
-        oneToNine = np.arange(1,10)
-        #exponential spacings from 10 to the end
-        expTorVector = pow(10, np.arange(1,np.log10(len(correlations[:,q])),0.1))
-        #Cast to integer so it can be used to index
-        expTorVector = np.concatenate((oneToNine, expTorVector)).astype(int)
-        #Taking only those samples that appear in the exponential vector
-        torCurve = correlations[expTorVector,q]
-        popt, pcov = scipy.optimize.curve_fit(risingExponential, expTorVector, torCurve)
-        paramResults[q] = popt
-        #This * operator is a python-y thing that extracts a tuple into arguments
-        currentCurve = risingExponential(expTorVector, *popt)
-    
-    return (paramResults, qValues, risingExponential, expTorVector)
-"""
 #Use this if you just want to run it in the console quickly, from a file.
 def bootstrap(path, qValues, fitting, weighting = ("linear",(1,))):
-    loadedCorrelations = np.loadtxt(path, delimiter = ' ')
+    loadedCorrelations = np.loadtxt(path)
     fittingResult = fitCorrelationsToFunction(loadedCorrelations, qValues, fitting, weighting)
     return (fittingResult, loadedCorrelations)
