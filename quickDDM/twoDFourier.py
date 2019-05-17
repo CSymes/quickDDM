@@ -14,12 +14,16 @@ import numpy as np
 framesArray: a 3d array formatted as [frame order, y position, x position]
 RETURN: [frameSquence, inverse y, inverse x], complex
 """
-def twoDFourier(framesArray):
+def twoDFourier(framesArray, normalise=True):
     #TODO: it is possible we can halve the size of the complex data by using rfft2
     #link: https://stackoverflow.com/questions/52387673/what-is-the-difference-between-numpy-fft-fft-and-numpy-fft-rfft/52388007
     #will need to test it thouroughly though
     framesArray = np.fft.fftshift(np.fft.fft2(framesArray), axes = (1,2))
-    return normaliseFourier(framesArray)
+
+    if normalise:
+        return normaliseFourier(framesArray)
+    else:
+        return framesArray
 
 def normaliseFourier(frames):
     # Normalise the transform (based on size, move to real domain)
