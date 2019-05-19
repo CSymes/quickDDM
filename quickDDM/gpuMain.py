@@ -12,8 +12,9 @@ import sys
 import numpy
 
 from pyopencl._cl import LogicError
-import reikna.cluda as cluda
-from reikna.fft import FFT
+import reikna
+from reikna.fft import FFT, FFTShift
+from reikna.transformations import norm_const, div_const
 
 from timeit import default_timer as time
 
@@ -23,12 +24,47 @@ from twoDFourier import twoDFourier
 from calculateQCurves import calculateQCurves
 from calculateCorrelation import calculateCorrelation
 
+cpuCheck = False
+
+
+def createFFTKernel(thread, shape):
+    footprint = thread.array(shape, dtype=numpy.complex)
+    fft = FFT(footprint).compile(thread)
+    return fft
+
+def createNormalisationKernel(thread, shape):
+    footprint = thread.array(shape, dtype=numpy.complex)
+    fftshift = FFTShift(footprint)
+
+    div = div_const(footprint, numpy.sqrt(numpy.prod(shape)))
+    norm = norm_const(footprint, 2)
+
+    fftshift.parameter.output.connect(div, div.input, output_prime=div.output)
+    fftshift.parameter.output_prime.connect(norm, norm.input, output_prime_2=norm.output)
+
+    normalise = fftshift.compile(thread)
+    return normalise
+
+
+"""
+TODO
+
+ * Retain GPU mem references
+ * Managed GPU mem properly
+
+ * Process more on GPU
+ * Formulate integration with UI (progress bars etc.)
+"""
+
 if __name__ == '__main__':
-    spacings = (1, 2)
+    if len(sys.argv) not in [2, 3]:
+        print('Invalid args')
+        exit()
+
+    spacings = range(3)
     correlations = []
 
     frames = readVideo(sys.argv[1]) # Read frames in
-    print(frames.shape)
     # rffts = [] # Store VRAM pointers
     ffts = [] # Store RAM pointers
 
@@ -37,7 +73,7 @@ if __name__ == '__main__':
     t_get = 0
 
     # Create access node for OpenCL
-    api = cluda.ocl_api()
+    api = reikna.cluda.ocl_api()
     try:
         thr = api.Thread.create()
     except LogicError:
@@ -50,22 +86,26 @@ if __name__ == '__main__':
             print(f'Using {cld.name} with {cld.global_mem_size/1024**3:.1f}GB VRAM')
             # print('Has extensions:', cld.extensions)
 
-    # need to compile an OpenCL kernel to run FFTs with
-    size = (len(frames[0]), len(frames[0][0]))
-    fft = FFT(thr.array(size, dtype=complex)).compile(thr)
+    # need to compile an OpenCL kernel to calculate FFTs with
+    fft = createFFTKernel(thr, frames[0].shape)
+    # and one to shift and normalise
+    normalise = createNormalisationKernel(thr, frames[0].shape)
 
     # Calculate and store FFT for each frame in global mem on the GPU
     for frame in frames:
         a = time()
 
+        res = thr.array(frames[0].shape, dtype=numpy.float64)
         devFr = thr.to_device(frame) # Send frame to device
+
         fft(devFr, devFr) # find transform, store back into same memory
+        normalise(res, devFr)
 
         b = time()
         t_fft += b-a
 
         # rffts.append(devFr) # keep transform in VRAM
-        ffts.append(devFr.get()) # store transform in main RAM
+        ffts.append(res.get()) # store transform in main RAM
 
         t_get += time()-b
 
@@ -77,18 +117,20 @@ if __name__ == '__main__':
     print(f'Copy Time: {t_get:.5f}')
     print(f'Conversion Time: {d-c:.5f}')
 
-    # Perform the same operation on the CPU to compare time consumed
-    o1 = time()
-    og_fft = numpy.fft.fftshift(numpy.fft.fft2(frames), axes = (1,2))
-    o2 = time()
-    print(f'CPU FFT Time: {o2-o1:.5f}')
+    if cpuCheck:
+        # Perform the same operation on the CPU to compare time consumed
+        tc1 = time()
+        og_fft = numpy.fft.fftshift(numpy.fft.fft2(frames), axes = (1,2))
+        tc2 = time()
+        print(f'CPU FFT Time: {tc2-tc1:.5f}')
 
+
+    d = time()
     for spacing in spacings:
-        break
         frameDifferences = frameDifferencer(ffts, spacing)
         fourierSections = twoDFourier(frameDifferences)
         qCurve = calculateQCurves(fourierSections)
         correlations.append(qCurve)
     correlations = calculateCorrelation(correlations)
 
-    print(f'Other Time: {time()-o2:.5f}')
+    print(f'Other Time: {time()-d:.5}')
