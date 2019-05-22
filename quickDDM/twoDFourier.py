@@ -19,7 +19,7 @@ def twoDFourier(framesArray):
 
 def normaliseFourier(frames):
     # Normalise the transform (based on size, move to real domain)
-    scaling = (frames.shape[1] * frames.shape[2]) ** 2
+    scaling = (frames.shape[1] * frames.shape[2])
     normalised = np.square(np.absolute(frames))/scaling
     return normalised
 
@@ -31,7 +31,7 @@ frames: a 3d array formatted as [frame order, y position, x position]
 RETURN: [inverse y, inverse x], average normalised absolute value
 """
 def cumulativeTransformAndAverage(frames):
-    scaling = (frames.shape[1] * frames.shape[2]) ** 2
+    scaling = (frames.shape[1] * frames.shape[2])
     averages = np.zeros(frames.shape[1:3])#Same spatial shape, no time
     for i in range(0,frames.shape[0]):
         #Don't have to worry about the axes here, since there is no time here
@@ -51,15 +51,15 @@ Theory link:  https://stackoverflow.com/questions/52387673/what-is-the-differenc
 """
 def realTwoDFourier(framesArray):
     
-    scaling = (framesArray.shape[1] * framesArray.shape[2]) ** 2
+    scaling = (framesArray.shape[1] * framesArray.shape[2])
     #Can't use default normalise because it is now half size
     framesArray = np.fft.fftshift(np.fft.rfft2(framesArray), axes = (-2,))
     return np.square(np.absolute(framesArray))/scaling
 
 #Same as above, but doesn't make the result real. Use before differencing.
 def realTwoDFourierUnnormalized(framesArray):
-    #Since the scaling is applied before the squaring, don't square it
-    scaling = (framesArray.shape[-2] * framesArray.shape[-1])
+    #Since the scaling is applied before the squaring, take the square root
+    scaling = np.sqrt((framesArray.shape[-2] * framesArray.shape[-1]))
     #Can't use default normalise because it is now half size
     framesArray = np.fft.fftshift(np.fft.rfft2(framesArray), axes = (-2,))
     return framesArray/scaling
@@ -68,7 +68,7 @@ def castToReal(framesArray):
     return np.square(np.absolute(framesArray))
     
 def cumulativeTransformAndAverageReal(frames):
-    scaling = (frames.shape[1] * frames.shape[2]) ** 2
+    scaling = (frames.shape[1] * frames.shape[2])
     if frames.shape[2] % 2 == 0:
         transformShape = (frames.shape[1],frames.shape[2]//2 + 1)
     else:

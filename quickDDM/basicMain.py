@@ -91,7 +91,7 @@ def realDifferenceMain(videoPath, spacings, outputPath = None):
 def realTransformMain(videoPath, spacings, outputPath = None):
     correlations = []
     videoInput = rV.readVideo(videoPath)
-    scaling = (videoInput.shape[1] * videoInput.shape[2]) ** 2
+    scaling = (videoInput.shape[1] * videoInput.shape[2])
     fourierSections = np.fft.fftshift(np.fft.rfft2(videoInput), axes = (1,))
     for spacing in spacings:
         frameDifferences = fD.frameDifferencer(fourierSections, spacing)
