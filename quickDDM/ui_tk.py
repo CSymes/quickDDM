@@ -93,7 +93,7 @@ class LoadFrame(Frame):
             fps = int(videoFile.get(cv2.CAP_PROP_FPS))
             width = int(videoFile.get(cv2.CAP_PROP_FRAME_HEIGHT))
             height = int(videoFile.get(cv2.CAP_PROP_FRAME_WIDTH))
-            self.maxDelta = frames // 2 - 1 # TODO confirm desired max
+            self.maxDelta = frames - 1
 
             # Update the labels in the UI that show the metadata
             self.FPS.set(f'{fps}')
@@ -119,6 +119,7 @@ class LoadFrame(Frame):
             self.spacing.delete(0, 'end')
             self.scaling.delete(0, 'end')
             self.spacing.insert(0, self.maxDelta)
+            self.spacingHelp.set(f' (max {self.maxDelta})')
             self.scaling.insert(0, DEFAULT_SCALING)
 
             self.video_file = videoFile
@@ -144,6 +145,7 @@ class LoadFrame(Frame):
         self.numFrames.set('')
         self.length.set('')
         self.spacing.set('')
+        self.spacingHelp.set('')
         self.scaling.set('')
 
         # Input/buttion disabling
@@ -169,6 +171,7 @@ class LoadFrame(Frame):
         scaling = self.scaling.get()
         fps = float(self.FPS.get())
         frames = int(self.numFrames.get())
+        exp = self.deltaExponential.get()
 
         # Final stage of validation for user inputs
         inputErrs = []
@@ -197,7 +200,7 @@ class LoadFrame(Frame):
         # The old has passed away...
 
         # ...behold, the new has come!
-        pframe = ProcessingFrame(win, filename, fps, frames, spacing, scaling)
+        pframe = ProcessingFrame(win, filename, fps, frames, spacing, scaling, exp)
         pframe.grid()
 
     """Rips the frame at `index` out of the chosen video and shows in the preview pane"""
@@ -315,17 +318,29 @@ class LoadFrame(Frame):
             mlSpacing.grid(row=5, column=0, sticky=E)
             mlScaling = Label(lMetaSubframe, text='Scale (pixels/μm): ')
             mlScaling.grid(row=6, column=0, sticky=E)
+            mlTime = Label(lMetaSubframe, text='Delta Spacing: ')
+            mlTime.grid(row=7, column=0, sticky=E)
 
-            self.spacing = Entry(lMetaSubframe, width=5, validate='all', validatecommand=(chkSpace, '%P'))
-            self.spacing.grid(row=5, column=1, sticky=W)
+            fSpacing = Frame(lMetaSubframe)
+            fSpacing.grid(row=5, column=1, sticky=W)
+            self.spacing = Entry(fSpacing, width=5, validate='all', validatecommand=(chkSpace, '%P'))
+            self.spacing.grid(row=0, column=0, sticky=W)
+            self.spacingHelp = StringVar()
+            fsHelp = Label(fSpacing, textvariable=self.spacingHelp)
+            fsHelp.grid(row=0, column=1, sticky=W)
             self.scaling = Entry(lMetaSubframe, width=5, validate='all', validatecommand=(chkScale, '%P'))
             self.scaling.grid(row=6, column=1, sticky=W)
 
             self.spacing['state'] = 'disabled'
             self.scaling['state'] = 'disabled'
+            self.deltaExponential = BooleanVar()
 
-            # TODO defaults (upper delta limit at least)
-            # TODO input verification
+            lTimeFrame = Frame(lMetaSubframe)
+            lTimeFrame.grid(row=7, column=1)
+            timeLinear = Radiobutton(lTimeFrame, text='Linear', value=False, variable=self.deltaExponential)
+            timeLinear.grid(row=0, column=0, sticky=[E, W])
+            timeExp = Radiobutton(lTimeFrame, text='Exponential', value=True, variable=self.deltaExponential)
+            timeExp.grid(row=0, column=1, sticky=[E, W])
 
         # Button to progress to next stage
         lLoad = Button(self, text='Analyse Video', command=self.triggerAnalysis)
@@ -356,7 +371,7 @@ class LoadFrame(Frame):
 
 
 class ProcessingFrame(Frame):
-    def __init__(self, parent, fname, fps, numFrames, maxDelta, scalingFactor):
+    def __init__(self, parent, fname, fps, numFrames, maxDelta, scalingFactor, exponentialSpacing):
         super().__init__(parent, padding=WINDOW_PADDING)
 
         self.populate()
@@ -364,6 +379,7 @@ class ProcessingFrame(Frame):
 
         self.correlation = None
         self.scalingFactor = scalingFactor # TODO factor this in
+        self.exponentialSpacing = exponentialSpacing # this too
         self.fps = fps
         self.numFrames = numFrames
 
