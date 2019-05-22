@@ -26,10 +26,15 @@ def differenceFirstMain(videoPath, spacings, outputPath = None):
         qCurve = cQC.calculateQCurves(fourierSections)
         correlations.append(qCurve)
     correlations = cC.calculateCorrelation(correlations)
+    
+    frameRate = rV.readFramerate(videoPath)
+    timeSpacings = np.array(spacings) / frameRate
+    #This is the way to stack arrays in numpy
+    outputMatrix = np.c_[timeSpacings, correlations]
     if outputPath is not None:
-        with open(outputPath, "ab") as file:
-            np.savetxt(file, correlations, delimiter = ' ')
-    return correlations
+        np.savetxt(outputPath, outputMatrix)
+    
+    return outputMatrix
 
 def transformFirstMain(videoPath, spacings, outputPath = None):
     correlations = []
@@ -41,10 +46,13 @@ def transformFirstMain(videoPath, spacings, outputPath = None):
         qCurve = cQC.calculateQCurves(frameDifferences)
         correlations.append(qCurve)
     correlations = cC.calculateCorrelation(correlations)
+    frameRate = rV.readFramerate(videoPath)
+    timeSpacings = np.array(spacings) / frameRate
+    #This is the way to stack arrays in numpy
+    outputMatrix = np.c_[timeSpacings, correlations]
     if outputPath is not None:
-        with open(outputPath, "ab") as file:
-            np.savetxt(file, correlations, delimiter = ' ')
-    return correlations
+        np.savetxt(outputPath, outputMatrix)
+    return outputMatrix
 
 def cumulativeDifferenceMain(videoPath, spacings, outputPath = None):
     correlations = []
@@ -55,10 +63,13 @@ def cumulativeDifferenceMain(videoPath, spacings, outputPath = None):
         qCurve = cQC.calculateWithCalls(fourierMeans)
         correlations.append(qCurve)
     correlations = cC.calculateCorrelation(correlations)
+    frameRate = rV.readFramerate(videoPath)
+    timeSpacings = np.array(spacings) / frameRate
+    #This is the way to stack arrays in numpy
+    outputMatrix = np.c_[timeSpacings, correlations]
     if outputPath is not None:
-        with open(outputPath, "ab") as file:
-            np.savetxt(file, correlations, delimiter = ' ')
-    return correlations
+        np.savetxt(outputPath, outputMatrix)
+    return outputMatrix
 
 def realDifferenceMain(videoPath, spacings, outputPath = None):
     correlations = []
@@ -69,7 +80,13 @@ def realDifferenceMain(videoPath, spacings, outputPath = None):
         qCurve = cQC.calculateRealQCurves(fourierSections)
         correlations.append(qCurve)
     correlations = cC.calculateCorrelation(correlations)
-    return correlations
+    frameRate = rV.readFramerate(videoPath)
+    timeSpacings = np.array(spacings) / frameRate
+    #This is the way to stack arrays in numpy
+    outputMatrix = np.c_[timeSpacings, correlations]
+    if outputPath is not None:
+        np.savetxt(outputPath, outputMatrix)
+    return outputMatrix
 
 def realTransformMain(videoPath, spacings, outputPath = None):
     correlations = []
@@ -82,11 +99,13 @@ def realTransformMain(videoPath, spacings, outputPath = None):
         frameDifferences = np.square(np.absolute(frameDifferences))/scaling
         qCurve = cQC.calculateRealQCurves(frameDifferences)
         correlations.append(qCurve)
-    correlations = cC.calculateCorrelation(correlations)
+    frameRate = rV.readFramerate(videoPath)
+    timeSpacings = np.array(spacings) / frameRate
+    #This is the way to stack arrays in numpy
+    outputMatrix = np.c_[timeSpacings, correlations]
     if outputPath is not None:
-        with open(outputPath, "ab") as file:
-            np.savetxt(file, correlations, delimiter = ' ')
-    return correlations
+        np.savetxt(outputPath, outputMatrix)
+    return outputMatrix
 
 def realAccumulateMain(videoPath, spacings, outputPath = None):
     correlations = []
@@ -96,11 +115,13 @@ def realAccumulateMain(videoPath, spacings, outputPath = None):
         fourierMeans = tDF.cumulativeTransformAndAverageReal(frameDifferences)
         qCurve = cQC.calculateRealQCurves(fourierMeans)
         correlations.append(qCurve)
-    correlations = cC.calculateCorrelation(correlations)
+    frameRate = rV.readFramerate(videoPath)
+    timeSpacings = np.array(spacings) / frameRate
+    #This is the way to stack arrays in numpy
+    outputMatrix = np.c_[timeSpacings, correlations]
     if outputPath is not None:
-        with open(outputPath, "ab") as file:
-            np.savetxt(file, correlations, delimiter = ' ')
-    return correlations
+        np.savetxt(outputPath, outputMatrix)
+    return outputMatrix
 
 #defaults to 1GB
 #does not currently use spacings, simplest possible version
@@ -114,7 +135,6 @@ def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1):
     #but halved because the real transform is used
     complexFrameByteSize = videoInput.shape[1] * videoInput.shape[2] * 128 / 2
     #TODO: adjust for the other RAM using variables
-    #frames per slice
     #one frame's RAM in reserve for the head
     framesPerSlice = int((RAMBytes // complexFrameByteSize) - 1)
     #The number of different slice intervals that must be take
@@ -165,6 +185,16 @@ def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1):
             timeDifference = relativeDifference + sliceSpacing * framesPerSlice
             correlations[timeDifference] = cQC.calculateRealQCurves(meanDifference)
     correlations = cC.calculateCorrelation(correlations)
-    return correlations
+    
+    
+    frameRate = rV.readFramerate(videoPath)
+    #TODO: if spacings are introduced, revise this to use them
+    timeSpacings = np.array(np.arange(1,len(correlations) + 1)) / frameRate
+    #This is the way to stack arrays in numpy
+    outputMatrix = np.c_[timeSpacings, correlations]
+    if outputPath is not None:
+        np.savetxt(outputPath, outputMatrix)
+    return outputMatrix
+    
 if __name__ == '__main__':
     differenceFirstMain(sys.argv[1], [1, 2, 3], sys.argv[2] if len(sys.argv) == 3 else None)
