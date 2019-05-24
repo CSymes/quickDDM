@@ -46,7 +46,7 @@ WINDOW_PADDING = 10 # pixels
 ADDR_PLACEHOLDER = 'Choose a file...' # Placeholder text for filepath entry box
 SCRUB_STEPS = 10 # previewable frames
 PREVIEW_DIM = 256 # size of the preview image (pixels, square)
-DEFAULT_SCALING = 10 # default scale factor (pixels/micron)
+DEFAULT_SCALING = 0.71 # default scale factor
 # ProcessingFrame constants
 SAMPLE_DIM = 512
 
@@ -132,7 +132,6 @@ class LoadFrame(Frame):
             self.handleScroll('moveto', '0.0') # Activate scrollbar, show preview
 
             loader.load_button.invoke() # TODO remove
-
             # Leave videoFile open for fetching of previews
 
         # File didn't open - not a video, corrupt, read error, or whatever else it could be
@@ -193,7 +192,7 @@ class LoadFrame(Frame):
 
         # Check scaling > 0
         try:
-            scaling = int(scaling)
+            scaling = float(scaling)
             if scaling == 0: raise ValueError()
         except ValueError:
             inputErrs.append('Invalid physical scale')
@@ -320,11 +319,11 @@ class LoadFrame(Frame):
 
             # Input validation
             chkSpace = self.register(lambda P: ((P.isdigit() and int(P) < int(self.numFrames.get())) or P == ""))
-            chkScale = self.register(lambda P: (P.isdigit() or P == ""))
+            chkScale = self.register(lambda P: (P.replace('.','', 1).isdigit() or P == ""))
 
             mlSpacing = Label(lMetaSubframe, text='Max. Spacing: ')
             mlSpacing.grid(row=5, column=0, sticky=E)
-            mlScaling = Label(lMetaSubframe, text='Scale (pixels/μm): ')
+            mlScaling = Label(lMetaSubframe, text='Physical Scaling: ')
             mlScaling.grid(row=6, column=0, sticky=E)
             mlTime = Label(lMetaSubframe, text='Delta Spacing: ')
             mlTime.grid(row=7, column=0, sticky=E)
@@ -389,12 +388,13 @@ class ProcessingFrame(Frame):
         self.plotCurves = []
         self.plotFits = []
 
-        self.scalingFactor = scalingFactor # relates pixels to metres # TODO factor this in
+        self.scalingFactor = scalingFactor
         self.exponentialSpacing = exponentialSpacing # this too
         self.fps = fps
         self.numFrames = numFrames
 
         self.fitting = ''
+        self.fitCurves = None
 
         # TODO exponential deltas
         deltaStep = 1
@@ -416,7 +416,10 @@ class ProcessingFrame(Frame):
         self.correlation = cold[:, 2:]
 
         for r in range(0, self.correlation.shape[1]):
-            self.results.insert('end', f'q = {r}')
+            self.results.insert('end', f'q = {r+1}')
+
+        self.fps = 100
+        self.numFrames = cold.shape[0]-1
 
         self.progress.set(100)
         self.stage.set('Done!')
@@ -549,7 +552,7 @@ class ProcessingFrame(Frame):
         return 'analysis complete'
 
     """Saves all current data to disk in a CSV (via a file selector)"""
-    def saveAllData(self):
+    def saveAllData(self): # TODO save fits
         if self.correlation is None:
             return
 
@@ -579,6 +582,7 @@ class ProcessingFrame(Frame):
             self.plotCurves.pop().remove()
         while self.plotFits:
             self.plotFits.pop().remove()
+        self.mpl.relim()
 
         # and create the new ones
         for i in self.results.curselection():
@@ -589,14 +593,14 @@ class ProcessingFrame(Frame):
             # Plot the q-vs-dt slice
             data = self.correlation[:, i]
 
-            qPoints = range(len(data))
+            # TODO precalc/cache plot curves and just hide instead of removing
+            curveRef = self.mpl.plot(range(len(data)), data, '-', color=cm.viridis(i / self.correlation.shape[1]))
+            self.plotCurves.append(curveRef[0])
 
-            curveRef = self.mpl.plot(self.deltas, data, '-', color=cm.viridis(d/self.correlation.shape[1]))[0]
-            self.plotCurves.append(curveRef)
-
-            if self.fitting:
-                fitRef = self.mpl_d.plot(qPoints, fit, '--', color=cm.viridis(i/self.correlation.shape[1]))[0]
-                self.plotFits.append(fitRef)
+            if self.fitCurves is not None:
+                fitData = self.fitCurves[i, :]
+                fitRef = self.mpl.plot(range(len(fitData)), fitData, '--', color=cm.viridis(i / self.correlation.shape[1]))
+                self.plotFits.append(fitRef[0])
 
 
         self.mpl.relim() # recalculate axis limits
@@ -606,23 +610,35 @@ class ProcessingFrame(Frame):
     Generates curve fitting for the current data
     Options for `model` are as in curveFitterBasic.py
     """
-    def triggerCurveFit(self):
+    def triggerCurveFit(self): # TODO thread this if necessary
         model = self.fitChoice.get()
         if model == self.fitting:
             return # No change
-        self.fitting = model # else store new fitting model
+        else:
+            self.fitting = model # else store new fitting model
 
+        # import code # Objection!
+        # code.interact(local=dict(globals(), **locals()))
+
+        # TODO prevent recalculating if fit changed back and forth
         if model != '': # and calculate fitting
             print(f'Fitting with assumption/{model}')
 
-            # import code # Objection!
-            # code.interact(local=dict(globals(), **locals()))
+            qPoints = numpy.arange(1, self.correlation.shape[1])
+            corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2))
+            print('Fitting over', qPoints.shape)
 
-            qPoints = numpy.arange(self.correlation.shape[1])
-            print('Fitted:', qPoints.shape)
+            fit = fitCorrelationsToFunction(self.correlation, qPoints, model, qCorrection=corrQ, timeSpacings=self.deltas)
+            self.fitCurves = generateFittedCurves(fit, qPoints, frameRate=self.fps, numFrames=self.numFrames, qCorrection=corrQ)
 
-            fit = fitCorrelationsToFunction(self.correlation, qPoints, self.fitting)
-            self.fitCurves = generateFittedCurves(fit, qPoints, frameRate=self.fps, numFrames=self.numFrames)
+            for artist in self.mpl_d.lines:
+                artist.remove() # clear old D curve
+
+            D = [] # and plot the new one
+            for seg in fit[0]:
+                if seg is not None:
+                    D.append(seg[2])
+            self.mpl_d.plot(qPoints, D, color=cm.tab10(0))
         else:
             print('Plotting without curve fitting')
 
@@ -675,9 +691,9 @@ class ProcessingFrame(Frame):
             bBrownian = Radiobutton(fFitting, text='Brownian Motion', indicatoron=0, variable=self.fitChoice,
                                     value='rising exponential', command=self.triggerCurveFit)
             bDirectional = Radiobutton(fFitting, text='Directional Motion', indicatoron=0, variable=self.fitChoice,
-                                    value='diffusion', command=self.triggerCurveFit)
+                                    value='TODO', command=self.triggerCurveFit)
             bNone = Radiobutton(fFitting, text='No Fitting', indicatoron=0, variable=self.fitChoice,
-                                    value='', command=lambda: self.triggerCurveFit(None))
+                                    value='', command=self.triggerCurveFit)
 
             bSave = Button(fFitting, text='Save All to Disk...', command=self.saveAllData)
 
@@ -686,12 +702,14 @@ class ProcessingFrame(Frame):
             bNone.grid(row=0, column=3, padx=(WINDOW_PADDING, WINDOW_PADDING*4))
             bSave.grid(row=0, column=4)
 
+            bDirectional['state'] = 'disabled' # TODO directional fitting
+
         # matplotlib figure on the right
         pFigure = Figure(figsize=(10, 6), dpi=100)
         pFigure.set_tight_layout(True) # reduce the huge default margins
         self.mpl = pFigure.add_subplot(2, 1, 1, xmargin=0, ymargin=0.1)
         self.mpl.set_xscale('log')
-        self.mpl.set_ylabel(r'$q\ (\mu m^{-1})$')
+        self.mpl.set_ylabel(r'$\Delta(\delta t)$')
         self.mpl.set_xlabel(r'$\delta t\ (s)$')
         self.mpl_d = pFigure.add_subplot(2, 1, 2, xmargin=0, ymargin=0.1)
         self.mpl_d.set_ylabel(r'$D\ (\mu m^2 s^{-1})$')
@@ -772,4 +790,4 @@ if __name__ == '__main__':
         window.mainloop() # hand control off to tkinter
 
 # TODO Think about splitting this into multiple files
-#      Maybe have a UI module instead of a UI *file*
+#      Maybe have a UI subpackage instead of a UI module
