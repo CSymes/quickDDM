@@ -12,9 +12,10 @@ from frameDifferencer import frameDifferencer
 from twoDFourier import twoDFourier
 from calculateQCurves import calculateQCurves
 from calculateCorrelation import calculateCorrelation
+from curveFitterBasic import fitCorrelationsToFunction, generateFittedCurves
 
 from tkinter import *
-from tkinter.ttk import *
+from tkinter.ttk import Frame, Progressbar, Scrollbar, Entry
 from tkinter import messagebox
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from tkinter.messagebox import askokcancel
@@ -22,8 +23,13 @@ from tkinter.messagebox import askokcancel
 from PIL import Image
 from PIL.ImageTk import PhotoImage
 
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from matplotlib.pyplot import cm
+
 import cv2
 import numpy
+import re
 
 # from pathos.multiprocessing import Pool as ProcPool
 import concurrent.futures as futures
@@ -49,7 +55,7 @@ SAMPLE_DIM = 512
 # processPool = ProcPool(processes=10)
 threadPool = futures.ThreadPoolExecutor(max_workers=10)
 threadResults = []
-multiKill = False # TODO implement threaded closure
+threadKill = False # TODO implement threaded closure
 
 
 
@@ -124,6 +130,8 @@ class LoadFrame(Frame):
 
             self.video_file = videoFile
             self.handleScroll('moveto', '0.0') # Activate scrollbar, show preview
+
+            loader.load_button.invoke() # TODO remove
 
             # Leave videoFile open for fetching of previews
 
@@ -378,22 +386,42 @@ class ProcessingFrame(Frame):
         center(parent) # Update window dimensions/placement
 
         self.correlation = None
-        self.scalingFactor = scalingFactor # TODO factor this in
+        self.plotCurves = []
+        self.plotFits = []
+
+        self.scalingFactor = scalingFactor # relates pixels to metres # TODO factor this in
         self.exponentialSpacing = exponentialSpacing # this too
         self.fps = fps
         self.numFrames = numFrames
 
+        self.fitting = ''
+
+        # TODO exponential deltas
         deltaStep = 1
         # list of frame deltas to analyse
-        deltas = range(1, maxDelta+1, deltaStep)
+        self.deltas = range(1, maxDelta+1, deltaStep)
 
         # Begin processing the video
-        startThread(self.beginAnalysis, fname, deltas)
+        startThread(self.loadResults, 'BulkResultChunker.txt')
+        # startThread(self.beginAnalysis, fname, self.deltas)
 
 
 
     ### Processing
 
+
+    def loadResults(self, fname):
+        cold = numpy.loadtxt(fname)
+        self.deltas = cold[:, 0]
+        self.correlation = cold[:, 2:]
+
+        for r in range(0, self.correlation.shape[1]):
+            self.results.insert('end', f'q = {r}')
+
+        self.progress.set(100)
+        self.stage.set('Done!')
+
+        return 'loading complete'
 
     """
     Begin the video analysis - see basicMain.py
@@ -484,12 +512,14 @@ class ProcessingFrame(Frame):
 
             curves[i] = q
 
-
+        for i in range(len(curves)):
             # Add to the UI listbox
-            self.results.insert('end', f'Δ = {spacing}')
+            self.results.insert('end', f'q = {i}')
+            # self.results.insert('end', f'Δ = {spacing}')
             # Select this entry in the list if all other entries selected
             if (len(self.results.curselection()) == i):
                 self.results.select_set(i)
+
         print(f'dTime: {dTime:.2f}')
         print(f'qTime: {qTime:.2f}')
 
@@ -504,7 +534,7 @@ class ProcessingFrame(Frame):
         self.stage.set('Done!')
 
         self.deltas = deltas
-        self.curves = curves
+        # self.curves = curves
 
         #                   kb RAM, time taken
         # for a 10-frame vid
@@ -535,27 +565,68 @@ class ProcessingFrame(Frame):
             d = numpy.array([x/self.fps for x in self.deltas])
             target = numpy.hstack((d[:, None], target))
 
-            numpy.savetxt(fn, target, delimiter='\t', fmt='%.5f')
+            numpy.savetxt(fn, target, delimiter=' ', fmt='%.5f')
             return f'saved {len(target)} rows to {fn}'
 
         startThread(save, self, filename)
 
     """Event handler for the list of deltas to update the displayed plots"""
-    def updateGraphs(self, event):
-        print([event.widget.get(i) for i in event.widget.curselection()])
+    def updateGraphs(self, *_):
+        # TODO keepalive
 
-        for i in event.widget.curselection():
-            pass
+        # remove old plots
+        while self.plotCurves:
+            self.plotCurves.pop().remove()
+        while self.plotFits:
+            self.plotFits.pop().remove()
+
+        # and create the new ones
+        for i in self.results.curselection():
+            # Extract frame q value from the human-readable string
+            d = int(re.search(r'(\d+)', self.results.get(i)).group(1))
+
+
+            # Plot the q-vs-dt slice
+            data = self.correlation[:, i]
+
+            qPoints = range(len(data))
+
+            curveRef = self.mpl.plot(self.deltas, data, '-', color=cm.viridis(d/self.correlation.shape[1]))[0]
+            self.plotCurves.append(curveRef)
+
+            if self.fitting:
+                fitRef = self.mpl_d.plot(qPoints, fit, '--', color=cm.viridis(i/self.correlation.shape[1]))[0]
+                self.plotFits.append(fitRef)
+
+
+        self.mpl.relim() # recalculate axis limits
+        self.mpl.rerender() # push the new plots to the rasterised UI element
 
     """
     Generates curve fitting for the current data
-    Options for `model` are
-        'motility'
-        'brownian'
+    Options for `model` are as in curveFitterBasic.py
     """
-    def curveFit(self, model):
-        print(f'Fitting with assumption/{model}')
-        # TODO
+    def triggerCurveFit(self):
+        model = self.fitChoice.get()
+        if model == self.fitting:
+            return # No change
+        self.fitting = model # else store new fitting model
+
+        if model != '': # and calculate fitting
+            print(f'Fitting with assumption/{model}')
+
+            # import code # Objection!
+            # code.interact(local=dict(globals(), **locals()))
+
+            qPoints = numpy.arange(self.correlation.shape[1])
+            print('Fitted:', qPoints.shape)
+
+            fit = fitCorrelationsToFunction(self.correlation, qPoints, self.fitting)
+            self.fitCurves = generateFittedCurves(fit, qPoints, frameRate=self.fps, numFrames=self.numFrames)
+        else:
+            print('Plotting without curve fitting')
+
+        self.updateGraphs()
 
 
 
@@ -585,6 +656,13 @@ class ProcessingFrame(Frame):
             # Yeah look I don't know why I need this, but otherwise there's a bunch of wasted space
             fProgress.columnconfigure(0, weight=10000)
 
+        # Left pane containing all calculated options for q
+        pResults = Listbox(self, selectmode='extended')
+        pResults.grid(row=2, column=0, sticky=[E, W, N, S])
+        pResults.bind('<<ListboxSelect>>', self.updateGraphs)
+        self.results = pResults
+        # TODO make a custom Listbox subclass and overhaul the selection system
+
 
         # Container
         fFitting = Frame(self)
@@ -593,29 +671,43 @@ class ProcessingFrame(Frame):
             lFitting = Label(fFitting, text='Curve fitting, assuming: ')
             lFitting.grid(row=0, column=0)
 
-            bBrownian = Button(fFitting, text='Brownian Motion', command=lambda: self.curveFit('brownian'))
-            bDirectional = Button(fFitting, text='Directional Motion', command=lambda: self.curveFit('motility'))
+            self.fitChoice = StringVar()
+            bBrownian = Radiobutton(fFitting, text='Brownian Motion', indicatoron=0, variable=self.fitChoice,
+                                    value='rising exponential', command=self.triggerCurveFit)
+            bDirectional = Radiobutton(fFitting, text='Directional Motion', indicatoron=0, variable=self.fitChoice,
+                                    value='diffusion', command=self.triggerCurveFit)
+            bNone = Radiobutton(fFitting, text='No Fitting', indicatoron=0, variable=self.fitChoice,
+                                    value='', command=lambda: self.triggerCurveFit(None))
+
             bSave = Button(fFitting, text='Save All to Disk...', command=self.saveAllData)
 
             bBrownian.grid(row=0, column=1)
-            bDirectional.grid(row=0, column=2, padx=(WINDOW_PADDING, WINDOW_PADDING*4))
-            bSave.grid(row=0, column=3)
+            bDirectional.grid(row=0, column=2, padx=(WINDOW_PADDING, WINDOW_PADDING))
+            bNone.grid(row=0, column=3, padx=(WINDOW_PADDING, WINDOW_PADDING*4))
+            bSave.grid(row=0, column=4)
 
-        pResults = Listbox(self, selectmode='extended')
-        pResults.grid(row=2, column=0, sticky=[E, W, N, S])
-        pResults.bind('<<ListboxSelect>>', self.updateGraphs)
-        self.results = pResults
-        # TODO make a custom Listbox subclass and overhaul the selection system
+        # matplotlib figure on the right
+        pFigure = Figure(figsize=(10, 6), dpi=100)
+        pFigure.set_tight_layout(True) # reduce the huge default margins
+        self.mpl = pFigure.add_subplot(2, 1, 1, xmargin=0, ymargin=0.1)
+        self.mpl.set_xscale('log')
+        self.mpl.set_ylabel(r'$q\ (\mu m^{-1})$')
+        self.mpl.set_xlabel(r'$\delta t\ (s)$')
+        self.mpl_d = pFigure.add_subplot(2, 1, 2, xmargin=0, ymargin=0.1)
+        self.mpl_d.set_ylabel(r'$D\ (\mu m^2 s^{-1})$')
+        self.mpl_d.set_xlabel(r'$q\ (\mu m^{-1})$')
 
-        pCurves = Canvas(self, relief='solid', borderwidth=1)
-        pCurves.configure(width=SAMPLE_DIM, height=SAMPLE_DIM)
-        pCurves.grid(row=2, column=2)
+        pCanvas = FigureCanvasTkAgg(pFigure, master=self) # tkinter portal for the MPL figure
+        pCanvas.draw()
+        self.mpl.rerender = pCanvas.draw # expose for access elsewhere
+        pCanvas.get_tk_widget().grid(row=2, column=2)
+        self.pc = pCanvas
+
 
         self.rowconfigure(1, minsize=WINDOW_PADDING) # buttons and list/canvas
         self.columnconfigure(0, weight=1, minsize=175) # allow for longer progress strings
         self.columnconfigure(1, minsize=WINDOW_PADDING) # Gap between left and right sections
         self.columnconfigure(2, weight=3)
-        # TODO allow resizing?
 
 
 def startThread(*args):
@@ -672,7 +764,7 @@ if __name__ == '__main__':
         window.after(100, checkThreads)
 
         def onQuit():
-            multiKill = True
+            threadKill = True
             # if askokcancel('Abort?', 'Are you sure you want to abort analysis?', default='cancel'):
             window.destroy()
 
