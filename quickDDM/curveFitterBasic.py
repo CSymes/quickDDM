@@ -27,7 +27,6 @@ They must return a single floating point value.
 #Differential Dynamic Microscopy of Bacterial Motility
 #Wilson et al
 #Published 5-JAN-2011
-#Note that this uses q as a parameter, meaning a lambda must be used
 def diffusionFunction(tau, D, *, q):
     return np.exp(-D*(pow(q,2))*tau)
 
@@ -37,9 +36,7 @@ def linearFunction(tau, m, c, *, q):
     
 #Mimicing what is used in "Characterizing Concentraded, Multiply Scattering..."
 #This one matches the provided experiment01 file quite well
-#It is an exponential curve that decays from B up toward 2A+B
-    
-   
+#It is an exponential curve that decays from B up toward A+B
 def risingExponential(deltaT, A, B, D, *, q):
     g = np.exp(-deltaT * D * (q**2))
     return A*(1-g)+B
@@ -334,4 +331,15 @@ def bootstrap(path, qValues, fitting, *, weighting = ("linear",(1,)), zoom = 0.7
     fittingResult = fitCorrelationsToFunction(loadedCorrelations, qValues, 
         fitting, weighting = weighting, qCorrection = qCorrection, 
         timeSpacings = timeSpacings)
+    plotCurveComparisonsLog(loadedCorrelations, fittingResult, (100,300,500), qCorrection= qCorrection, timeSpacings = timeSpacings)
+    DList = []
+    for fitTuple in fittingResult[0]:
+        if fitTuple is not None:
+            DList.append(fitTuple[2])
+    DList = np.array(DList)
+    plt.plot(np.array(qValues) * qCorrection, DList)
+    plt.ylabel('Diffusion coefficient in um^2/s')
+    plt.xlabel('q (um^-1)')
+    plt.title("D as a function of q")
+    plt.show()
     return (fittingResult, loadedCorrelations)
