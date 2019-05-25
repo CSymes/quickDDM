@@ -47,15 +47,22 @@ ADDR_PLACEHOLDER = 'Choose a file...' # Placeholder text for filepath entry box
 SCRUB_STEPS = 10 # previewable frames
 PREVIEW_DIM = 256 # size of the preview image (pixels, square)
 DEFAULT_SCALING = 0.71 # default scale factor
-# ProcessingFrame constants
-SAMPLE_DIM = 512
+
+# Intermodule/function constants
+FITTING_BROWNIAN = 'rising exponential'
+FITTING_DIRECTIONAL = 'TODO'
+FITTING_NONE = ''
+
+BACKEND_CPU = 'CPU'
+BACKEND_GPU = 'GPU'
+BACKEND_LOAD = 'FromDisk' # TODO frontend integration
 
 # Processes vs Threads - essentially - bypasses the GIL vs ease of memory sharing
 # stackoverflow.com/questions/3044580/multiprocessing-vs-threading-python
 # processPool = ProcPool(processes=10)
 threadPool = futures.ThreadPoolExecutor(max_workers=10)
 threadResults = []
-threadKill = False # TODO implement threaded closure
+threadKill = False
 
 
 
@@ -179,6 +186,7 @@ class LoadFrame(Frame):
         fps = float(self.FPS.get())
         frames = int(self.numFrames.get())
         exp = self.deltaExponential.get()
+        backend = self.backendChoice.get()
 
         # Final stage of validation for user inputs
         inputErrs = []
@@ -207,7 +215,7 @@ class LoadFrame(Frame):
         # The old has passed away...
 
         # ...behold, the new has come!
-        pframe = ProcessingFrame(win, filename, fps, frames, spacing, scaling, exp)
+        pframe = ProcessingFrame(win, backend, filename, fps, frames, spacing, scaling, exp)
         pframe.grid()
 
     """Rips the frame at `index` out of the chosen video and shows in the preview pane"""
@@ -276,7 +284,6 @@ class LoadFrame(Frame):
                                     (self.address.get() == ADDR_PLACEHOLDER) else None)
         lAdd.bind('<FocusOut>', lambda e: (self.address.set(ADDR_PLACEHOLDER) or self.clearPreviews())
                   if (self.address.get() == '') else self.loadVideo(self.address.get()))
-        self.lAdd = lAdd # TODO remove lol
 
         # file chooser button
         lChoose = Button(self, text='Choose Source', command=self.triggerVideoSelect)
@@ -342,12 +349,35 @@ class LoadFrame(Frame):
             self.scaling['state'] = 'disabled'
             self.deltaExponential = BooleanVar()
 
-            lTimeFrame = Frame(lMetaSubframe)
-            lTimeFrame.grid(row=7, column=1)
-            timeLinear = Radiobutton(lTimeFrame, text='Linear', value=False, variable=self.deltaExponential)
+            fTimeSpacing = Frame(lMetaSubframe)
+            fTimeSpacing.grid(row=7, column=1)
+            timeLinear = Radiobutton(fTimeSpacing, text='Linear', value=False, variable=self.deltaExponential)
             timeLinear.grid(row=0, column=0, sticky=[E, W])
-            timeExp = Radiobutton(lTimeFrame, text='Exponential', value=True, variable=self.deltaExponential)
+            timeExp = Radiobutton(fTimeSpacing, text='Exponential', value=True, variable=self.deltaExponential)
             timeExp.grid(row=0, column=1, sticky=[E, W])
+
+
+
+            # Backend choice
+            lMetaSubframe.rowconfigure(8, minsize=10)
+            lProc = Label(lMetaSubframe, text='Processing Backend: ')
+            lProc.grid(row=9, column=0, sticky=E)
+
+            self.backendChoice = StringVar()
+
+            fProc = Frame(lMetaSubframe)
+            fProc.grid(row=9, column=1, sticky=[E, W])
+            procCPU = Radiobutton(fProc, text='CPU', value=BACKEND_CPU, variable=self.backendChoice)
+            procCPU.grid(row=0, column=0)
+            procGPU = Radiobutton(fProc, text='GPU', value=BACKEND_GPU, variable=self.backendChoice)
+            procGPU.grid(row=0, column=1)
+
+            self.backendChoice.set(BACKEND_CPU) # Preselect CPU
+            procCPU['width'] = len(timeLinear['text']) # Align radio buttons
+            procCPU['anchor'] = W
+            timeLinear['width'] = len(timeLinear['text'])
+            timeLinear['anchor'] = W
+            procGPU['state'] = 'disabled' # TODO
 
         # Button to progress to next stage
         lLoad = Button(self, text='Analyse Video', command=self.triggerAnalysis)
@@ -378,7 +408,7 @@ class LoadFrame(Frame):
 
 
 class ProcessingFrame(Frame):
-    def __init__(self, parent, fname, fps, numFrames, maxDelta, scalingFactor, exponentialSpacing):
+    def __init__(self, parent, backend, fname, fps, numFrames, maxDelta, scalingFactor, exponentialSpacing):
         super().__init__(parent, padding=WINDOW_PADDING)
 
         self.populate()
@@ -395,15 +425,22 @@ class ProcessingFrame(Frame):
 
         self.fitting = ''
         self.fitCurves = None
+        self.fitCache = {}
 
         # TODO exponential deltas
         deltaStep = 1
         # list of frame deltas to analyse
         self.deltas = range(1, maxDelta+1, deltaStep)
 
+        backend = BACKEND_LOAD
+
         # Begin processing the video
-        startThread(self.loadResults, 'BulkResultChunker.txt')
-        # startThread(self.beginAnalysis, fname, self.deltas)
+        if backend == BACKEND_CPU: # TODO implement the chunking alg
+            startThread(self.beginAnalysis_CPU, fname, self.deltas)
+        elif backend == BACKEND_GPU:
+            startThread(self.beginAnalysis_GPU, fname, self.deltas)
+        elif backend == BACKEND_LOAD:
+            startThread(self.loadResults, 'BulkResultChunker.txt')
 
 
 
@@ -418,8 +455,8 @@ class ProcessingFrame(Frame):
         for r in range(0, self.correlation.shape[1]):
             self.results.insert('end', f'q = {r+1}')
 
-        self.fps = 100
-        self.numFrames = cold.shape[0]-1
+        self.fps = 1 / self.deltas[0]
+        self.numFrames = self.deltas.shape[0] + 1
 
         self.progress.set(100)
         self.stage.set('Done!')
@@ -428,9 +465,9 @@ class ProcessingFrame(Frame):
 
     """
     Begin the video analysis - see basicMain.py
-    Threaded away from the UI
+    Threaded away from the UI, uses CPU
     """
-    def beginAnalysis(self, fname, deltas):
+    def beginAnalysis_CPU(self, fname, deltas):
         startTime = time()
 
         self.progressBar['mode'] = 'indeterminate'
@@ -441,12 +478,6 @@ class ProcessingFrame(Frame):
 
         print(f'# of deltas: {len(deltas)}')
         curves = numpy.zeros((len(deltas), len(frames[0])//2)) # store processed data
-
-        # TODO test multiprocessing the deltas
-        # https://stackoverflow.com/questions/659865/multiprocessing-sharing-a-large-read-only-object-between-processes
-        # TODO test Fourier before delta
-        # check shelving out if memory an issues
-        # https://docs.python.org/3/library/shelve.html
 
         if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         # Configure UI display
@@ -471,14 +502,7 @@ class ProcessingFrame(Frame):
         fours = [fourierWrapper(f) for f in frames]
         print(f'fTime: {time()-a:.2f}')
         self.stage.set('Optimising Fourier container')
-
-        # print(frames[0])
-        # print(fours[0])
-        # exit()
-
-        # TODO remove
-        # import code
-        # code.interact(local=locals())
+        if threadKill: return 'analysis aborted'
 
         a=time()
         if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
@@ -497,7 +521,7 @@ class ProcessingFrame(Frame):
         qTime=0
         for i, spacing in enumerate(deltas):
             # Configure UI display
-            self.stage.set(f'Processing Δ {i+1}/{len(deltas)}')
+            self.stage.set(f'Processing Delta {i+1}/{len(deltas)}')
             self.progress.set(i)
 
 
@@ -514,6 +538,8 @@ class ProcessingFrame(Frame):
             qTime += time()-a ###
 
             curves[i] = q
+
+            if threadKill: return 'analysis aborted'
 
         for i in range(len(curves)):
             # Add to the UI listbox
@@ -536,20 +562,17 @@ class ProcessingFrame(Frame):
         self.progress.set(len(deltas))
         self.stage.set('Done!')
 
-        self.deltas = deltas
-        # self.curves = curves
-
-        #                   kb RAM, time taken
-        # for a 10-frame vid
-        #   naively:        410860, 4.77s
-        #   fourier first:  353368, 2.04s
-        # 100-frames
-        #   naively:       4318268, 51.9s
-        #   fourier first: 2683788, 13.6s
         if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         print(f'total time: {time() - startTime:.2f}')
 
         return 'analysis complete'
+
+    """
+    Begin the video analysis - see gpuMain.py
+    Threaded, plus uses GPU acceleration
+    """
+    def beginAnalysis_GPU(self, fname, deltas):
+        pass # TODO
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self): # TODO save fits
@@ -606,43 +629,58 @@ class ProcessingFrame(Frame):
         self.mpl.relim() # recalculate axis limits
         self.mpl.rerender() # push the new plots to the rasterised UI element
 
+    """Spins off a thread to run the curve fitting on"""
+    def triggerCurveFit(self):
+        # spin fitting off onto another thread to allow uninterrupted use of the UI
+        oldModel = self.fitting
+        self.fitting = self.fitChoice.get()
+
+        if self.fitting != oldModel:
+            startThread(self.makeFits, self.fitting, callback=self.updateGraphs)
+
+        # TODO spinner animation?
+
     """
     Generates curve fitting for the current data
     Options for `model` are as in curveFitterBasic.py
     """
-    def triggerCurveFit(self): # TODO thread this if necessary
-        model = self.fitChoice.get()
-        if model == self.fitting:
-            return # No change
-        else:
-            self.fitting = model # else store new fitting model
+    def makeFits(self, model):
+        # clear old D curve regardless of new fitting
+        for artist in self.mpl_d.lines:
+            artist.remove()
 
-        # import code # Objection!
-        # code.interact(local=dict(globals(), **locals()))
-
-        # TODO prevent recalculating if fit changed back and forth
-        if model != '': # and calculate fitting
+        if model != FITTING_NONE: # and calculate fitting
             print(f'Fitting with assumption/{model}')
+            qPoints = numpy.arange(1, self.correlation.shape[1]) # All valid values for q
 
-            qPoints = numpy.arange(1, self.correlation.shape[1])
-            corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2))
-            print('Fitting over', qPoints.shape)
+            if model in self.fitCache: # This fitting's already been calculated
+                self.fitCurves = self.fitCache[model][0] # pull curves back out
+                D = self.fitCache[model][1] # as well as the diffusivity data
 
-            fit = fitCorrelationsToFunction(self.correlation, qPoints, model, qCorrection=corrQ, timeSpacings=self.deltas)
-            self.fitCurves = generateFittedCurves(fit, qPoints, frameRate=self.fps, numFrames=self.numFrames, qCorrection=corrQ)
+                msg = 'restored fitting for {model}'
+            else:
+                print('Calculating curve fitting over', qPoints.shape, 'points')
+                corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2)) # q-correction-factor for fitting
 
-            for artist in self.mpl_d.lines:
-                artist.remove() # clear old D curve
+                fit = fitCorrelationsToFunction(self.correlation, qPoints, model, qCorrection=corrQ, timeSpacings=self.deltas)
+                self.fitCurves = generateFittedCurves(fit, qPoints, frameRate=self.fps, numFrames=self.numFrames, qCorrection=corrQ)
 
-            D = [] # and plot the new one
-            for seg in fit[0]:
-                if seg is not None:
-                    D.append(seg[2])
-            self.mpl_d.plot(qPoints, D, color=cm.tab10(0))
+                D = [] # and plot the new one
+                for seg in fit[0]:
+                    if seg is not None:
+                        D.append(seg[2])
+
+                self.fitCache[model] = (self.fitCurves, D) # cache fitting data for reuse later, if necessary
+
+                msg = f'{model} fitting complete'
+
+            self.mpl_d.plot(qPoints, D, color=cm.tab10(0)) # plot diffusivity curve
         else:
             print('Plotting without curve fitting')
+            self.fitCurves = None
+            msg = 'fitting disabled'
 
-        self.updateGraphs()
+        return msg
 
 
 
@@ -689,11 +727,11 @@ class ProcessingFrame(Frame):
 
             self.fitChoice = StringVar()
             bBrownian = Radiobutton(fFitting, text='Brownian Motion', indicatoron=0, variable=self.fitChoice,
-                                    value='rising exponential', command=self.triggerCurveFit)
+                                    value=FITTING_BROWNIAN, command=self.triggerCurveFit)
             bDirectional = Radiobutton(fFitting, text='Directional Motion', indicatoron=0, variable=self.fitChoice,
-                                    value='TODO', command=self.triggerCurveFit)
+                                    value=FITTING_DIRECTIONAL, command=self.triggerCurveFit)
             bNone = Radiobutton(fFitting, text='No Fitting', indicatoron=0, variable=self.fitChoice,
-                                    value='', command=self.triggerCurveFit)
+                                    value=FITTING_NONE, command=self.triggerCurveFit)
 
             bSave = Button(fFitting, text='Save All to Disk...', command=self.saveAllData)
 
@@ -727,9 +765,19 @@ class ProcessingFrame(Frame):
         self.columnconfigure(1, minsize=WINDOW_PADDING) # Gap between left and right sections
         self.columnconfigure(2, weight=3)
 
+"""
+Starts a thread on the ThreadPool.
+arguments:
+    threadFunc: function that runs in the thread
+    *args: arguments to give to the threadFunc() call
+    callback [optional]: function to be run on the main thread after execution finishes
+"""
+def startThread(threadFunc, *args, callback=None):
+    future = threadPool.submit(threadFunc, *args)
 
-def startThread(*args):
-    future = threadPool.submit(*args)
+    # Allow functions to be run on the main thread after execution of a thread
+    # This is necessary since Tkinter isn't thread-safe and will crash if you reference it from another thread
+    future.callback = callback
     threadResults.append(future)
 
 """Set the window's position"""
@@ -762,31 +810,41 @@ if __name__ == '__main__':
     loader = LoadFrame(window)
     loader.grid()
 
+    center(window) # set window location and generate geometry
+    window.winfo_toplevel().title('quickDDM')
+    window.resizable(False, False) # It's not really super responsive
+
     # TODO delete lol
     loader.address.set('../tests/data/10frames.avi')
-    loader.lAdd.event_generate("<FocusOut>", when="tail")
+    for c in loader.winfo_children():
+        c.event_generate('<FocusOut>', when='tail')
     # TODO
-
-    center(window) # set window location
-    window.winfo_toplevel().title("quickDDM")
-    window.resizable(False, False) # It's not really super responsive
 
     with threadPool: # Ensure worker pools get shutdown
         def checkThreads(): # periodic poll to check for threaded errors
+            # get any completed threads (without blocking)
             [done, ndone] = futures.wait(threadResults, timeout=0, return_when=futures.FIRST_COMPLETED)
             for future in done:
                 print(f'Thread return: {future.result()}')
                 threadResults.remove(future)
 
-            window.after(100, checkThreads)
+                # Run any post-thread stuff on the main thread - e.g. Tkinter draw calls
+                if future.callback is not None:
+                    future.callback()
+
+            window.after(100, checkThreads) # schedule next check
         window.after(100, checkThreads)
 
         def onQuit():
+            global threadKill
+
             threadKill = True
-            # if askokcancel('Abort?', 'Are you sure you want to abort analysis?', default='cancel'):
+            if loader.winfo_exists(): # Only query if analysis has begun # TODO don't question it if results saved to disk?
+                pass
+                # if askokcancel('Abort?', 'Are you sure you want to abort analysis?', default='cancel'):
             window.destroy()
 
-        window.protocol("WM_DELETE_WINDOW", onQuit)
+        window.protocol('WM_DELETE_WINDOW', onQuit)
         window.mainloop() # hand control off to tkinter
 
 # TODO Think about splitting this into multiple files
