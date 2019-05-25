@@ -30,6 +30,7 @@ from matplotlib.pyplot import cm
 import cv2
 import numpy
 import re
+import random
 
 # from pathos.multiprocessing import Pool as ProcPool
 import concurrent.futures as futures
@@ -450,10 +451,10 @@ class ProcessingFrame(Frame):
     def loadResults(self, fname):
         cold = numpy.loadtxt(fname)
         self.deltas = cold[:, 0]
-        self.correlation = cold[:, 2:]
+        self.correlation = cold[:, 1:]
 
-        for r in range(0, self.correlation.shape[1]):
-            self.results.insert('end', f'q = {r+1}')
+        for r in range(1, self.correlation.shape[1]):
+            self.results.insert('end', f'q = {r}')
 
         self.fps = 1 / self.deltas[0]
         self.numFrames = self.deltas.shape[0] + 1
@@ -521,7 +522,7 @@ class ProcessingFrame(Frame):
         qTime=0
         for i, spacing in enumerate(deltas):
             # Configure UI display
-            self.stage.set(f'Processing Delta {i+1}/{len(deltas)}')
+            self.stage.set(f'Processing δt {i+1}/{len(deltas)}')
             self.progress.set(i)
 
 
@@ -598,8 +599,6 @@ class ProcessingFrame(Frame):
 
     """Event handler for the list of deltas to update the displayed plots"""
     def updateGraphs(self, *_):
-        # TODO keepalive
-
         # remove old plots
         while self.plotCurves:
             self.plotCurves.pop().remove()
@@ -612,73 +611,97 @@ class ProcessingFrame(Frame):
             # Extract frame q value from the human-readable string
             d = int(re.search(r'(\d+)', self.results.get(i)).group(1))
 
-
             # Plot the q-vs-dt slice
-            data = self.correlation[:, i]
+            data = self.correlation[:, d]
+            # Randomly choose a colour from the palette
+            random.seed(d) # but make sure it's always the same for this curve, too
+            colour = cm.viridis(random.random())
 
-            # TODO precalc/cache plot curves and just hide instead of removing
-            curveRef = self.mpl.plot(range(len(data)), data, '-', color=cm.viridis(i / self.correlation.shape[1]))
-            self.plotCurves.append(curveRef[0])
+            curveRef = self.mpl.plot(range(len(data)), data, '-', color=colour)[0]
+            self.plotCurves.append(curveRef)
 
-            if self.fitCurves is not None:
-                fitData = self.fitCurves[i, :]
-                fitRef = self.mpl.plot(range(len(fitData)), fitData, '--', color=cm.viridis(i / self.correlation.shape[1]))
-                self.plotFits.append(fitRef[0])
+            curveRef.set_label(f'q = {d}')
+
+            if self.fitCurves is not None: # avoid "no handles" MPL warning
+                fitData = self.fitCurves[d, :]
+                fitRef = self.mpl.plot(range(len(fitData)), fitData, '--', color=colour)[0]
+                self.plotFits.append(fitRef)
 
 
+        if len(self.mpl.get_lines()):
+            self.mpl.legend(loc='upper left', fontsize ='x-small')
         self.mpl.relim() # recalculate axis limits
-        self.mpl.rerender() # push the new plots to the rasterised UI element
+        self.rerender() # push the new plots to the rasterised UI element
 
     """Spins off a thread to run the curve fitting on"""
     def triggerCurveFit(self):
-        # spin fitting off onto another thread to allow uninterrupted use of the UI
         oldModel = self.fitting
         self.fitting = self.fitChoice.get()
 
-        if self.fitting != oldModel:
-            startThread(self.makeFits, self.fitting, callback=self.updateGraphs)
+        if self.correlation is None: # No data loaded yet
+            # TODO it'd probably be good to disable buttons until this isn't the case
+            self.fitChoice.set(FITTING_NONE)
+            self.fitting = FITTING_NONE
+            print('no available data to fit to')
+            return
 
-        # TODO spinner animation?
+        if self.fitting != oldModel: # don't recalc if you press the button again
+            # clear old D curve regardless of new fitting
+            for artist in self.mpl_d.get_lines():
+                artist.remove()
+            leg = self.mpl_d.get_legend()
+            if leg: leg.remove()
+
+            if self.fitting == FITTING_NONE: # just remove D-curve and stop plotting fits
+                print('Plotting without curve fitting')
+                self.fitCurves = None
+                self.rerender()
+                return
+
+            # show some text in mpl_d to show something's happening
+            elevatorText = self.mpl_d.text(0.5, 0.5, 'Generating curve fitting...', horizontalalignment='center',
+                                           verticalalignment='center', transform=self.mpl_d.transAxes)
+            self.mpl_d.loaders.append(elevatorText)
+            self.rerender()
+
+            startThread(self.makeFits, self.fitting, callback=self.updateGraphs)
 
     """
     Generates curve fitting for the current data
     Options for `model` are as in curveFitterBasic.py
     """
     def makeFits(self, model):
-        # clear old D curve regardless of new fitting
-        for artist in self.mpl_d.lines:
-            artist.remove()
+        print(f'Fitting with assumption/{model}')
+        qPoints = numpy.arange(1, self.correlation.shape[1]) # All valid values for q
 
-        if model != FITTING_NONE: # and calculate fitting
-            print(f'Fitting with assumption/{model}')
-            qPoints = numpy.arange(1, self.correlation.shape[1]) # All valid values for q
+        if model in self.fitCache: # This fitting's already been calculated
+            self.fitCurves = self.fitCache[model][0] # pull curves back out
+            D = self.fitCache[model][1] # as well as the diffusivity data
 
-            if model in self.fitCache: # This fitting's already been calculated
-                self.fitCurves = self.fitCache[model][0] # pull curves back out
-                D = self.fitCache[model][1] # as well as the diffusivity data
-
-                msg = 'restored fitting for {model}'
-            else:
-                print('Calculating curve fitting over', qPoints.shape, 'points')
-                corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2)) # q-correction-factor for fitting
-
-                fit = fitCorrelationsToFunction(self.correlation, qPoints, model, qCorrection=corrQ, timeSpacings=self.deltas)
-                self.fitCurves = generateFittedCurves(fit, qPoints, frameRate=self.fps, numFrames=self.numFrames, qCorrection=corrQ)
-
-                D = [] # and plot the new one
-                for seg in fit[0]:
-                    if seg is not None:
-                        D.append(seg[2])
-
-                self.fitCache[model] = (self.fitCurves, D) # cache fitting data for reuse later, if necessary
-
-                msg = f'{model} fitting complete'
-
-            self.mpl_d.plot(qPoints, D, color=cm.tab10(0)) # plot diffusivity curve
+            msg = 'restored fitting for {model}'
         else:
-            print('Plotting without curve fitting')
-            self.fitCurves = None
-            msg = 'fitting disabled'
+            print('Calculating curve fitting over', qPoints.shape, 'points')
+            corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2)) # q-correction-factor for fitting
+
+            # Find fitted equation paramaters
+            fit = fitCorrelationsToFunction(self.correlation, qPoints, model, qCorrection=corrQ, timeSpacings=self.deltas)
+            # and generate plots with that data
+            self.fitCurves = generateFittedCurves(fit, qPoints, frameRate=self.fps, numFrames=self.numFrames, qCorrection=corrQ)
+            # First curve doesn't get a fit, but good to preserve dimensions anyway, so insert a dummy row
+            self.fitCurves = numpy.concatenate((numpy.zeros((1, self.fitCurves.shape[1])), self.fitCurves), 0)
+
+            # extract diffusivity curve from fitting data too
+            D = [seg[2] for seg in fit[0] if seg is not None]
+
+            self.fitCache[model] = (self.fitCurves, D) # cache fitting data for reuse later, if necessary
+            msg = f'{model} fitting complete'
+
+        self.mpl_d.plot(qPoints, D, color=cm.tab10(0), label='Diffusivity') # plot diffusivity curve
+        self.mpl_d.legend(fontsize ='x-small')
+
+        # remove the 'calculating' text from mpl_d
+        if self.mpl_d.loaders:
+            self.mpl_d.loaders.pop().remove()
 
         return msg
 
@@ -718,7 +741,7 @@ class ProcessingFrame(Frame):
         # TODO make a custom Listbox subclass and overhaul the selection system
 
 
-        # Container
+        # Container for the buttons above the plotting figure
         fFitting = Frame(self)
         fFitting.grid(row=0, column=2, sticky=E)
         if fFitting:
@@ -752,10 +775,11 @@ class ProcessingFrame(Frame):
         self.mpl_d = pFigure.add_subplot(2, 1, 2, xmargin=0, ymargin=0.1)
         self.mpl_d.set_ylabel(r'$D\ (\mu m^2 s^{-1})$')
         self.mpl_d.set_xlabel(r'$q\ (\mu m^{-1})$')
+        self.mpl_d.loaders = [] # container for loading text for curve fitting
 
         pCanvas = FigureCanvasTkAgg(pFigure, master=self) # tkinter portal for the MPL figure
         pCanvas.draw()
-        self.mpl.rerender = pCanvas.draw # expose for access elsewhere
+        self.rerender = pCanvas.draw # expose for access elsewhere
         pCanvas.get_tk_widget().grid(row=2, column=2)
         self.pc = pCanvas
 
