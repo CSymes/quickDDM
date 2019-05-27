@@ -37,3 +37,14 @@ def readVideo(file):
         framesRead += 1
     videoFile.release()
     return videoArray
+
+    
+"""
+file: file path to read from, as string
+RETURN: framerate as single float
+"""
+def readFramerate(file):
+    videoFile = cv2.VideoCapture(file)
+    # Successfully opened the video
+    fps = int(videoFile.get(cv2.CAP_PROP_FPS))
+    return fps
