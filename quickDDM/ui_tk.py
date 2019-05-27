@@ -13,6 +13,7 @@ from twoDFourier import twoDFourier
 from calculateQCurves import calculateQCurves
 from calculateCorrelation import calculateCorrelation
 from curveFitterBasic import fitCorrelationsToFunction, generateFittedCurves
+from basicMain import sequentialChunkerMain
 
 from tkinter import *
 from tkinter.ttk import Frame, Progressbar, Scrollbar, Entry
@@ -63,7 +64,6 @@ BACKEND_LOAD = 'FromDisk' # TODO frontend integration
 # processPool = ProcPool(processes=10)
 threadPool = futures.ThreadPoolExecutor(max_workers=10)
 threadResults = []
-threadKill = False
 
 
 
@@ -139,7 +139,7 @@ class LoadFrame(Frame):
             self.video_file = videoFile
             self.handleScroll('moveto', '0.0') # Activate scrollbar, show preview
 
-            loader.load_button.invoke() # TODO remove
+            # loader.load_button.invoke() # TODO remove
             # Leave videoFile open for fetching of previews
 
         # File didn't open - not a video, corrupt, read error, or whatever else it could be
@@ -159,9 +159,9 @@ class LoadFrame(Frame):
         self.dim.set('')
         self.numFrames.set('')
         self.length.set('')
-        self.spacing.set('')
+        self.spacing.delete(0, END)
         self.spacingHelp.set('')
-        self.scaling.set('')
+        self.scaling.delete(0, END)
 
         # Input/buttion disabling
         self.load_button['state'] = 'disabled'
@@ -431,24 +431,30 @@ class ProcessingFrame(Frame):
         # TODO exponential deltas
         deltaStep = 1
         # list of frame deltas to analyse
-        self.deltas = range(1, maxDelta+1, deltaStep)
+        self.deltas = numpy.arange(1, maxDelta+1, deltaStep)
 
-        backend = BACKEND_LOAD
+        # Wrapper for passing access to the progress elements of the UI around
+        progressManager = ProgressWrapper(self.stage, self.progressBar, self.progress)
+
+        # backend = BACKEND_LOAD
 
         # Begin processing the video
-        if backend == BACKEND_CPU: # TODO implement the chunking alg
-            startThread(self.beginAnalysis_CPU, fname, self.deltas)
+        if backend == BACKEND_CPU:
+            startThread(self.beginAnalysis_CPU, fname, self.deltas, progressManager)
         elif backend == BACKEND_GPU:
-            startThread(self.beginAnalysis_GPU, fname, self.deltas)
+            startThread(self.beginAnalysis_GPU, fname, self.deltas, progressManager)
         elif backend == BACKEND_LOAD:
-            startThread(self.loadResults, 'BulkResultChunker.txt')
+            startThread(self.loadResults, 'BulkResultChunker.txt', progressManager)
 
 
 
     ### Processing
 
 
-    def loadResults(self, fname):
+    def loadResults(self, fname, progress):
+        progress.setText('Loading from disk')
+        progress.cycle()
+
         cold = numpy.loadtxt(fname)
         self.deltas = cold[:, 0]
         self.correlation = cold[:, 1:]
@@ -459,8 +465,8 @@ class ProcessingFrame(Frame):
         self.fps = 1 / self.deltas[0]
         self.numFrames = self.deltas.shape[0] + 1
 
-        self.progress.set(100)
-        self.stage.set('Done!')
+        progress.setPercentage(100)
+        progress.setText('Done!')
 
         return 'loading complete'
 
@@ -468,7 +474,7 @@ class ProcessingFrame(Frame):
     Begin the video analysis - see basicMain.py
     Threaded away from the UI, uses CPU
     """
-    def beginAnalysis_CPU(self, fname, deltas):
+    def beginAnalysis_CPU_outmoded(self, fname, deltas):
         startTime = time()
 
         self.progressBar['mode'] = 'indeterminate'
@@ -503,7 +509,7 @@ class ProcessingFrame(Frame):
         fours = [fourierWrapper(f) for f in frames]
         print(f'fTime: {time()-a:.2f}')
         self.stage.set('Optimising Fourier container')
-        if threadKill: return 'analysis aborted'
+        if threadKiller: return 'analysis aborted'
 
         a=time()
         if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
@@ -540,7 +546,7 @@ class ProcessingFrame(Frame):
 
             curves[i] = q
 
-            if threadKill: return 'analysis aborted'
+            if threadKiller: return 'analysis aborted'
 
         for i in range(len(curves)):
             # Add to the UI listbox
@@ -568,11 +574,24 @@ class ProcessingFrame(Frame):
 
         return 'analysis complete'
 
+    def beginAnalysis_CPU(self, fname, deltas, progress):
+        progress.setText('Processing')
+        progress.cycle()
+
+        self.correlation = sequentialChunkerMain(fname, deltas, progress=progress, abortFlag=threadKiller)
+
+        if self.correlation is None: return 'thread aborted'
+
+        for r in range(1, self.correlation.shape[1]):
+            self.results.insert('end', f'q = {r}')
+
+        return 'analysis complete'
+
     """
     Begin the video analysis - see gpuMain.py
     Threaded, plus uses GPU acceleration
     """
-    def beginAnalysis_GPU(self, fname, deltas):
+    def beginAnalysis_GPU(self, fname, deltas, progress):
         pass # TODO
 
     """Saves all current data to disk in a CSV (via a file selector)"""
@@ -683,6 +702,14 @@ class ProcessingFrame(Frame):
             print('Calculating curve fitting over', qPoints.shape, 'points')
             corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2)) # q-correction-factor for fitting
 
+            # Dirty hack to prevent any sneaky rows of zeros breaking the curve fitting
+            # Think this is only caused by overtly small sample sets
+            empties = numpy.where(~self.correlation.any(axis=0))[0]
+            print(f'Forward-filling empty q-curves at {empties}')
+            for row in empties:
+                self.correlation[:, row] = self.correlation[:, row+1]
+                # Just copy the next row. With 512 radial pixels, this should be be unnoticable
+
             # Find fitted equation paramaters
             fit = fitCorrelationsToFunction(self.correlation, qPoints, model, qCorrection=corrQ, timeSpacings=self.deltas)
             # and generate plots with that data
@@ -789,6 +816,38 @@ class ProcessingFrame(Frame):
         self.columnconfigure(1, minsize=WINDOW_PADDING) # Gap between left and right sections
         self.columnconfigure(2, weight=3)
 
+"""Simple wrapper to allow passing a threaded exit flag around by reference"""
+class ExitWrapper():
+    def __init__(self): self.exit = False
+    def __bool__(self): return self.exit
+    def set(self, v): self.exit = v
+
+class ProgressWrapper():
+    def __init__(self, text, bar, barval):
+        self.text = text
+        self.bar = bar
+        self.bar_value = barval
+
+        self.setText = self.text.set
+
+    def setPercentage(self, pc):
+        # import code
+        # code.interact(local=dict(globals(), **locals()))
+        if self.bar['mode'].string == 'indeterminate':
+            self.bar.stop()
+            self.bar['mode'] = 'determinate'
+
+        self.bar_value.set(pc)
+
+    def setProgress(self, current, target):
+        self.setPercentage(100*current/target)
+
+    def cycle(self):
+        self.setPercentage(0)
+        self.bar['mode'] = 'indeterminate'
+        self.bar.start()
+
+
 """
 Starts a thread on the ThreadPool.
 arguments:
@@ -845,8 +904,12 @@ if __name__ == '__main__':
     # TODO
 
     with threadPool: # Ensure worker pools get shutdown
+        global threadKiller
+        threadKiller = ExitWrapper()
+
         def checkThreads(): # periodic poll to check for threaded errors
             # get any completed threads (without blocking)
+            # TODO graphically show errors?
             [done, ndone] = futures.wait(threadResults, timeout=0, return_when=futures.FIRST_COMPLETED)
             for future in done:
                 print(f'Thread return: {future.result()}')
@@ -860,9 +923,7 @@ if __name__ == '__main__':
         window.after(100, checkThreads)
 
         def onQuit():
-            global threadKill
-
-            threadKill = True
+            threadKiller.set(True)
             if loader.winfo_exists(): # Only query if analysis has begun # TODO don't question it if results saved to disk?
                 pass
                 # if askokcancel('Abort?', 'Are you sure you want to abort analysis?', default='cancel'):
