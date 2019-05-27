@@ -407,9 +407,17 @@ def compareFittings(fitA, fitB, correlations, qIndicies, *, qCorrection = 1, tim
     plt.legend()
     plt.title("Linearly Scaled Comparison")
     plt.show()
-    
-#Use this if you just want to run it in the console quickly, from a file.
-def bootstrap(path, qValues, fitting, *, weighting = ("linear",(1,)), zoom = 0.71):
+ 
+"""
+THIS IS NOT PRODUCTION CODE, A FINISHED SYSTEM SHOULD NEVER RUN THIS
+Use this if you just want to run this process in the console quickly, from a 
+file. This is incredibly useful for debugging. It loads in correlations, treats
+the first slice as the time spacings (what we expect from the main process),
+calculates the fittings, and displays the result, including a diffusivity curve
+It returns the correlations and the fitting result tuple. 
+""" 
+def bootstrap(path, qValues, fitting, *, weighting = ("linear",(1,)), 
+        zoom = 0.71):
     loadedData = np.loadtxt(path)
     #Assumes that it has been given data with time spacings at the start
     loadedCorrelations = loadedData[:,1:]
@@ -418,7 +426,8 @@ def bootstrap(path, qValues, fitting, *, weighting = ("linear",(1,)), zoom = 0.7
     fittingResult = fitCorrelationsToFunction(loadedCorrelations, qValues, 
         fitting, weighting = weighting, qCorrection = qCorrection, 
         timeSpacings = timeSpacings)
-    plotCurveComparisonsLog(loadedCorrelations, fittingResult, (100,300,500), qCorrection= qCorrection, timeSpacings = timeSpacings)
+    plotCurveComparisonsLog(loadedCorrelations, fittingResult, (100,300,500), 
+            qCorrection= qCorrection, timeSpacings = timeSpacings)
     DList = []
     for fitTuple in fittingResult[0]:
         if fitTuple is not None:
