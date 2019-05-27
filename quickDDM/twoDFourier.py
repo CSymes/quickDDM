@@ -23,6 +23,13 @@ def normaliseFourier(frames):
     normalised = np.square(np.absolute(frames))/scaling
     return normalised
 
+def twoDFourierUnnormalized(framesArray):
+    #Since the scaling is applied before the squaring, take the square root
+    scaling = np.sqrt((framesArray.shape[-2] * framesArray.shape[-1]))
+    #Can't use default normalise because it is now half size
+    framesArray = np.fft.fftshift(np.fft.fft2(framesArray), axes = (-2,-1))
+    return framesArray/scaling
+
     
 """
 Attempt at decreasing memory demands by taking the average in the same action

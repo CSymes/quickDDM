@@ -37,7 +37,7 @@ def calculateQCurves(fourierDifferences):
     qCurve = np.zeros(averages.shape[0]//2)
     #only while we get a full circle
     #TODO: try to rework this into numpy array format
-    while(r < xSize/2):
+    while(r < xSize // 2):
         pickGrid = radiusGrid == r
         qCurve[r] = (np.mean(averages[pickGrid]))
         r += 1
@@ -73,7 +73,7 @@ def calculateRealQCurves(fourierDifferences):
     qCurve = np.zeros(averages.shape[0]//2)
     #only while we get a full circle
     #TODO: try to rework this into numpy array format
-    while(r < ySize/2):
+    while(r < ySize // 2):
         pickGrid = radiusGrid == r
         qCurve[r] = (np.mean(averages[pickGrid]))
         r += 1
@@ -108,7 +108,7 @@ def generateGrid(dims):
 def takeCurves(averages, radiusGrid):
     r = 1;
     qCurves = np.zeros(averages.shape[0]//2)
-    while(r < averages.shape[0]/2):
+    while(r < averages.shape[0] // 2):
         pickGrid = radiusGrid == r
         qCurves[r] = (np.mean(averages[pickGrid]))
         r += 1

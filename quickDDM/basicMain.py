@@ -152,10 +152,13 @@ def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1):
         #The index by which new frames are grabbed for the slice
         baseIndex = 0
         #Finding the expected shape of the transform results
-        if videoInput.shape[2] % 2 == 0:
-            transformShape = (videoInput.shape[1],videoInput.shape[2]//2 + 1)
+        
+        #trying something new, dropping a couple of samples to match matlab (1 in each dimension)
+        if (videoInput.shape[2] - 1) % 2 == 0:
+            transformShape = (videoInput.shape[1] - 1, (videoInput.shape[2] - 1)//2 + 1)
         else:
-            transformShape = (videoInput.shape[1],(videoInput.shape[2]+1)//2)
+            #+1 for the real transform correction, -1 to drop a sample based on MATLAB
+            transformShape = (videoInput.shape[1] - 1,(videoInput.shape[2]+1-1)//2)
         totalDifferencesShape = (framesPerSlice, transformShape[0], transformShape[1])
         #Preparing the destination of the frame differences
         totalDifferences = np.zeros(totalDifferencesShape)
@@ -166,10 +169,11 @@ def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1):
             if len(currentSlice) == framesPerSlice:
                 currentSlice.popleft()
             #Get a new value into the slice queue
-            currentSlice.append(tDF.realTwoDFourierUnnormalized(videoInput[baseIndex,:,:]))
+            #Also drops a row and column
+            currentSlice.append(tDF.realTwoDFourierUnnormalized(videoInput[baseIndex,:-1,:-1]))
             baseIndex += 1
-            
-            head = videoInput[headIndex,:,:]
+            #Drops a row and column
+            head = videoInput[headIndex,:-1,:-1]
             head = tDF.realTwoDFourierUnnormalized(head)
             #time difference between this frame and the first in the queue
             relativeDifference = 0
@@ -188,7 +192,6 @@ def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1):
     
     
     frameRate = rV.readFramerate(videoPath)
-    #TODO: if spacings are introduced, revise this to use them
     timeSpacings = np.array(np.arange(1,len(correlations) + 1)) / frameRate
     #This is the way to stack arrays in numpy
     outputMatrix = np.c_[timeSpacings, correlations]
@@ -197,4 +200,4 @@ def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1):
     return outputMatrix
     
 if __name__ == '__main__':
-    differenceFirstMain(sys.argv[1], [1, 2, 3], sys.argv[2] if len(sys.argv) == 3 else None)
+    sequentialChunkerMain('C:\\Users\\Lionel\\Documents\\GitHub\\quickDDM\\tests\\data\\10frames.avi', None)
