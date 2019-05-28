@@ -595,9 +595,11 @@ class ProcessingFrame(Frame):
         pass # TODO
 
     """Saves all current data to disk in a CSV (via a file selector)"""
-    def saveAllData(self): # TODO save fits
+    def saveAllData(self):
         if self.correlation is None:
             return
+
+        # TODO save metadata
 
         filename = asksaveasfilename(initialdir = '.',
                                      title = 'Select save location',
@@ -607,12 +609,14 @@ class ProcessingFrame(Frame):
 
         # Split IO onto its own thread
         def save(self, fn):
-            target = self.correlation
-            d = numpy.array([x/self.fps for x in self.deltas])
-            target = numpy.hstack((d[:, None], target))
+            numpy.savetxt(fn, self.correlation, delimiter=' ')
+            r = f'saved {len(self.correlation)} rows to {fn}'
 
-            numpy.savetxt(fn, target, delimiter=' ', fmt='%.5f')
-            return f'saved {len(target)} rows to {fn}'
+            if self.fitCurves is not None:
+                # Append add '_fitting' to filename and save as csv
+                fn_fit = re.sub(r'\.csv$', '', fn) + '_fitting.csv'
+                numpy.savetxt(fn_fit, self.fitCurves, delimiter=' ')
+
 
         startThread(save, self, filename)
 
