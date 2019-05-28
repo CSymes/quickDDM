@@ -37,12 +37,48 @@ def calculateQCurves(fourierDifferences):
     qCurve = np.zeros(averages.shape[0]//2)
     #only while we get a full circle
     #TODO: try to rework this into numpy array format
-    while(r < xSize/2):
+    while(r < xSize // 2):
         pickGrid = radiusGrid == r
         qCurve[r] = (np.mean(averages[pickGrid]))
         r += 1
     return qCurve
 
+"""
+This version is designed to handle the result of rff2, which has half of the x
+elements removed
+fourierDifferences: a complex array, (time, y, x)
+RETURN: a 1d intensity array, at increasing radii
+"""
+def calculateRealQCurves(fourierDifferences):
+    if len(fourierDifferences.shape) == 3:
+        averages = np.mean(fourierDifferences, axis = 0)
+    else:
+        averages = fourierDifferences
+    #last and second last dimensions
+    ySize = fourierDifferences.shape[-2]
+    xSize = fourierDifferences.shape[-1]
+    #For now, it is just mimicing the provided MATLAB, which isn't ideal, but sue me.
+    yRange = np.arange(-ySize/2.0,ySize/2.0, dtype = np.int32)
+    xRange = np.arange(0,xSize, dtype = np.int32)
+    xGrid, yGrid = np.meshgrid(xRange,yRange)
+    #This hot mess gets the radial values as integers, with appropriate rounding
+    radiusGrid = np.around(np.sqrt(np.square(yGrid) + np.square(xGrid)),0).astype(np.int16)
+    yRange, xRange, xGrid, yGrid = 0, 0, 0, 0
+    
+    #Removing the y centre and x edge values, which are often incorrectly high
+    radiusGrid[:,0] = -1
+    radiusGrid[ySize//2,:] = -1
+    r = 1;
+    #TODO: test with different input dimensions (particularly odd lengths)
+    qCurve = np.zeros(averages.shape[0]//2)
+    #only while we get a full circle
+    #TODO: try to rework this into numpy array format
+    while(r < ySize // 2):
+        pickGrid = radiusGrid == r
+        qCurve[r] = (np.mean(averages[pickGrid]))
+        r += 1
+    return qCurve
+    
 def calculateWithCalls(fourierDifferences):
     # Normalising here no longer required - performed in the Fourier module
     if len(fourierDifferences.shape) == 3:
@@ -72,7 +108,7 @@ def generateGrid(dims):
 def takeCurves(averages, radiusGrid):
     r = 1;
     qCurves = np.zeros(averages.shape[0]//2)
-    while(r < averages.shape[0]/2):
+    while(r < averages.shape[0] // 2):
         pickGrid = radiusGrid == r
         qCurves[r] = (np.mean(averages[pickGrid]))
         r += 1
