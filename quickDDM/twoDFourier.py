@@ -8,15 +8,29 @@ As of hotfix01, all variants should be updated to have an fftshift
 @author: Lionel
 """
 
+import numpy as np
+
 """
+Takes the 2-demensional Fourier transform of a list of (assumed square)
+frames and returns the list of shifted and normalised outputs
+
 framesArray: a 3d array formatted as [frame order, y position, x position]
 RETURN: [frameSquence, inverse y, inverse x]
 """
-import numpy as np
-def twoDFourier(framesArray):
+def twoDFourier(framesArray, normalise=True):
     framesArray = np.fft.fftshift(np.fft.fft2(framesArray), axes = (1,2))
-    return normaliseFourier(framesArray)
 
+    if normalise:
+        return normaliseFourier(framesArray)
+    else:
+        return framesArray
+
+"""
+Takes a list of frames and normalises each frame: take each pixel and squares its
+absolute value, then dividies by the product of the frame's dimensions.
+
+frames: a 3d complex array of fft outputs - [frame index, y position, x position]
+"""
 def normaliseFourier(frames):
     # Normalise the transform (based on size, move to real domain)
     scaling = (frames.shape[1] * frames.shape[2])
@@ -30,10 +44,10 @@ def twoDFourierUnnormalized(framesArray):
     framesArray = np.fft.fftshift(np.fft.fft2(framesArray), axes = (-2,-1))
     return framesArray/scaling
 
-    
 """
 Attempt at decreasing memory demands by taking the average in the same action
 as the absolute value, to never have a full complex array in memory
+
 frames: a 3d array formatted as [frame order, y position, x position]
 RETURN: [inverse y, inverse x], average normalised absolute value
 """

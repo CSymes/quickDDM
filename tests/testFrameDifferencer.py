@@ -9,7 +9,7 @@ Series of tests for the frame subtraction functionality
 from quickDDM.readVideo import readVideo
 from quickDDM.frameDifferencer import frameDifferencer
 import unittest
-import numpy
+import numpy, numpy.testing
 
 class FrameDifferenceTestCases(unittest.TestCase):
     def testSubtractingIdenticalFrames(self):
@@ -37,6 +37,15 @@ class FrameDifferenceTestCases(unittest.TestCase):
         for delta in range(len(frames)):
             diff = frameDifferencer(frames, delta)
             self.assertEqual(len(diff), correctNum(delta))
+
+    def testThisVsMatlab(self):
+        frames = readVideo('tests/data/small.avi')
+        diff = frameDifferencer(frames, 1)[0]
+
+        with open('tests/data/diff_matlab_2-1.csv', 'rb') as fm:
+            gold = numpy.loadtxt(fm, delimiter=',')
+            numpy.testing.assert_array_equal(gold, diff)
+
 
     def testOverlyWideSpacingFails(self):
         frames = readVideo('tests/data/10frames.avi')
