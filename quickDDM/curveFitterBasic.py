@@ -273,8 +273,8 @@ def plotCurveComparisonsLinear(correlations, fittingResult, qIndicies,
             tauVector = timeSpacings
             #Otherwise, the vector for caculating the fitting should be linear
             #across the same range as the provided data
-            fitTauVector = np.arange(1, len(tauCurve) + 1) / len(
-                                     timeSpacings) * np.max(timeSpacings)
+            fitTauVector = (np.arange(1, len(tauCurve) + 1)
+                    / len(timeSpacings) * np.max(timeSpacings))
         fitCurve = fitFunction(fitTauVector, *fitParams[q], q = realQ)
 
         plt.plot(tauVector, tauCurve, '-',
