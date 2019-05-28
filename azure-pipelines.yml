@@ -23,7 +23,7 @@ steps:
     pip install unittest-xml-reporting
   displayName: 'Install requirements'
 
-- script: python -m xmlrunner discover tests -o /tmp/build/quickDDM-tests
+- script: python -m xmlrunner discover tests -v -o /tmp/build/quickDDM-tests
   displayName: 'Run all tests'
 
 - task: PublishTestResults@2

@@ -11,7 +11,11 @@ As of hotfix01, all variants should be updated to have an fftshift
 import numpy as np
 
 """
+Takes the 2-demensional Fourier transform of a list of (assumed square)
+frames and returns the list of shifted and normalised outputs
+
 framesArray: a 3d array formatted as [frame order, y position, x position]
+normalsie: a boolean, indicating whether frame normalisation should be performed at this point
 RETURN: [frameSquence, inverse y, inverse x]
 """
 def twoDFourier(framesArray, normalise=True):
@@ -22,6 +26,12 @@ def twoDFourier(framesArray, normalise=True):
     else:
         return framesArray
 
+"""
+Takes a list of frames and normalises each frame: take each pixel and squares its
+absolute value, then dividies by the product of the frame's dimensions.
+
+frames: a 3d complex array of fft outputs - [frame index, y position, x position]
+"""
 def normaliseFourier(frames):
     # Normalise the transform (based on size, move to real domain)
     scaling = (frames.shape[1] * frames.shape[2])
@@ -38,6 +48,7 @@ def twoDFourierUnnormalized(framesArray):
 """
 Attempt at decreasing memory demands by taking the average in the same action
 as the absolute value, to never have a full complex array in memory
+
 frames: a 3d array formatted as [frame order, y position, x position]
 RETURN: [inverse y, inverse x], average normalised absolute value
 """
@@ -53,7 +64,7 @@ def cumulativeTransformAndAverage(frames):
 
 """
 This version havles memory requirements by using rfft. However, this changes
-the dimensionality of the result, which means that the "real" versions of 
+the dimensionality of the result, which means that the "real" versions of
 calculate q curves must be used as well after this. Also changes fftshift needs
 framesArray: a 3d array formatted as [frame order, y position, x position]
 RETURN: [frameSquence, inverse y, inverse x]
@@ -61,7 +72,7 @@ Note that the inverse x axis is half the length of the original
 Theory link:  https://stackoverflow.com/questions/52387673/what-is-the-difference-between-numpy-fft-fft-and-numpy-fft-rfft/52388007
 """
 def realTwoDFourier(framesArray):
-    
+
     scaling = (framesArray.shape[1] * framesArray.shape[2])
     #Can't use default normalise because it is now half size
     framesArray = np.fft.fftshift(np.fft.rfft2(framesArray), axes = (-2,))
@@ -74,10 +85,10 @@ def realTwoDFourierUnnormalized(framesArray):
     #Can't use default normalise because it is now half size
     framesArray = np.fft.fftshift(np.fft.rfft2(framesArray), axes = (-2,))
     return framesArray/scaling
-    
+
 def castToReal(framesArray):
     return np.square(np.absolute(framesArray))
-    
+
 def cumulativeTransformAndAverageReal(frames):
     scaling = (frames.shape[1] * frames.shape[2])
     if frames.shape[2] % 2 == 0:
