@@ -18,9 +18,9 @@ from inspect import signature
 These functions are the various functions to which to fit the provided data
 They must take parameters:
 (tauVector, *fitParams, *, q)
-where tauVector is the sequence of time differences and fitParams are the 
+where tauVector is the sequence of time differences and fitParams are the
 parameters to adjust to fit the function.
-The *,q marks q as a named argument, which must be supplied. This must be 
+The *,q marks q as a named argument, which must be supplied. This must be
 present whether or not q is part of the function, to ensure consistency.
 The fitParams must be individual floating point numbers.
 They must return a single floating point value.
@@ -34,7 +34,7 @@ and q is not used.
 def linearFunction(tau, m, c, *, q):
     return tau*m + c
 
-"""    
+"""
 This is a standard diffusion/brownian motion function.
 It is an exponential curve that decays from B up toward A+B as tor increases.
 The most relevant parameter to extract from fitting results here is D,
@@ -43,7 +43,7 @@ which is the diffusivity of the sample.
 def risingExponential(deltaT, A, B, D, *, q):
     g = np.exp(-deltaT * D * (q**2))
     return A*(1-g)+B
-   
+
 """
 This is the dictionary from which to access fitting functions. Modify this here
 whenever a new weighting scheme is added. DO NOT modify this during execution.
@@ -54,8 +54,8 @@ FITTING_FUNCTIONS ={
     "rising exponential":risingExponential,
     "linear":linearFunction
 }
-   
-   
+
+
 """
 These functions serve to generate initial estimates and bounds for the fitting
 functions, to get a nice, accurate fit.
@@ -64,7 +64,7 @@ Infinity is a valid bound, but if one intial guess or bound is returned, all
 must have values. For example ((1,2), None, None) is a valid return, but not
 ((1,None), None, None) or ((1,2), (1,2,3), None)
 Each one has a signature:
-correlation: one correlation curve at fixed q for which to produce intial 
+correlation: one correlation curve at fixed q for which to produce intial
 estimates and bounds.
 RETURN: tuple (estimatesArray, (lowerBoundsArray, upperBoundsArray))
 estimatesArray: The initial estimates for each fitting parameter, in order
@@ -87,7 +87,7 @@ def risingExponentialGuess(correlation):
     lowerBounds = np.array([Amin, Bmin, Dmin])
     upperBounds = np.array([Amax, Bmax, Dmax])
     return (estimates,(lowerBounds, upperBounds))
-    
+
 """
 This is the dictionary from which to access intial guess functions. Modify this
 here whenever a new weighting scheme is added. DO NOT modify this during
@@ -99,16 +99,16 @@ GUESS_FUNCTIONS ={
     "rising exponential":risingExponentialGuess,
     "linear":None
 }
-   
+
 """
 These functions are used to create tau vectors to downsample the provided
-correlation curve. They take parameters of 
+correlation curve. They take parameters of
 (correlationCurve, sampleParams)
-where correlationCurve is a single vector from the correlation function and 
+where correlationCurve is a single vector from the correlation function and
 sampleParams is a tuple of floats that serve as the parameters of the function
-The sampleParams are a tuple so that different schemes may use different 
+The sampleParams are a tuple so that different schemes may use different
 parameters
-RETURN: a vector of integers from 1 to some values less than 
+RETURN: a vector of integers from 1 to some values less than
 len(correlationCurve), that may be used to index correlationCurve.
 available weighting schemes:
     linear: takes linearly spaced samples. One param, the spacing desired,
@@ -118,8 +118,8 @@ available weighting schemes:
     samples are taken in the first 10, as these are the most important for
     fitting.
     percentile: Excludes values after the first element that exceeds the nth
-    percentile of the curve. One param, the percentile to cut off at. 
-    This gives a much shorter vector, and needs more understanding of the 
+    percentile of the curve. One param, the percentile to cut off at.
+    This gives a much shorter vector, and needs more understanding of the
     expected curve than the others.
 """
 
@@ -137,7 +137,7 @@ def expSpacing(correlationCurve, sampleParams):
     #Cast to integer so it can be used to index
     expTauVector = np.concatenate((oneToNine, expTauVector)).astype(int)
     return expTauVector
-   
+
 def percentileSpacing(correlationCurve, sampleParams):
     percent = sampleParams[0]
     medianIntensity = np.percentile(correlationCurve, percent)
@@ -145,7 +145,7 @@ def percentileSpacing(correlationCurve, sampleParams):
     lastIndex = exceedingElements[0][0]
     tauVector = np.arange(0,lastIndex).astype(int)
     return tauVector
-    
+
 """
 This is the dictionary from which to access weighting schemes. Modify this here
 whenever a new weighting scheme is added. DO NOT modify this during execution.
@@ -164,7 +164,7 @@ values, with the specified fitting.
 correlations: The 2d matrix of intensity[dT,q]
 qValues: list of int, q values at which to fit, in pixels, used to index
     correlation matrix
-fitting: string specifying which function to use as the model, see 
+fitting: string specifying which function to use as the model, see
     FITTING_FUNCTIONS aboves
 weighting: tuple(String,(*float)) how to bias the sampling (log, linear, etc)
     The floating point tuple is the parameter for the weighting, e.g how many
@@ -176,11 +176,11 @@ timeSpacings: array(float), optional parameter, manually sets the time spacing
 frameRate: float, optional parameter, used if no timeSpacings are provided.
     Measured in frames per second, assumes that frames are linearly spaced.
 RETURN: tuple of (array(popt),array(realQ), function) where popt is
-the 1D array of fitting parameters for a given q value, realQ is the q value 
-in um^-1 that corresponds to that set of fitting parameters (equivalent to 
-qValues * qCorrection), and function is a pointer to the function it used as 
+the 1D array of fitting parameters for a given q value, realQ is the q value
+in um^-1 that corresponds to that set of fitting parameters (equivalent to
+qValues * qCorrection), and function is a pointer to the function it used as
 a model.
-The popt array has the appropriate set at each index in qValues, and is None 
+The popt array has the appropriate set at each index in qValues, and is None
 elsewhere
 
 A future project would do well to use named tuples for the output if any futher
@@ -190,11 +190,11 @@ It is very possible that the weighting component is unneded. Consider dropping
 it if it isn't useful. Alternatively, just don't pass anything and it will use
 the default, which is normally appropriate
 """
-def fitCorrelationsToFunction(correlations, qValues, fitting, *, 
-        weighting = ("linear", (1,)), qCorrection = 1, 
+def fitCorrelationsToFunction(correlations, qValues, fitting, *,
+        weighting = ("linear", (1,)), qCorrection = 1,
         timeSpacings = None, frameRate = 100):
     paramResults = [None] * correlations.shape[1]
-    
+
     scheme = WEIGHTING_SCHEMES[weighting[0]]
     guessGenerator = GUESS_FUNCTIONS[fitting]
     fittingFunction = FITTING_FUNCTIONS[fitting]
@@ -228,9 +228,9 @@ def fitCorrelationsToFunction(correlations, qValues, fitting, *,
             popt, pcov = scipy.optimize.curve_fit(fitLambda, tauVector,
                     tauCurve, p0 = initials)
         #Calculating the actual fitting parameters
-        
+
         paramResults[q] = popt
-    
+
     return (paramResults, np.array(qValues) * qCorrection, fittingFunction)
 
 
@@ -261,9 +261,9 @@ def plotCurveComparisonsLinear(correlations, fittingResult, qIndicies,
         realQ = q * qCorrection
         if fitParams[q] is None:
             continue
-        
+
         tauCurve = correlations[:,q]
-        
+
         if timeSpacings is None:
             #If not given, both the vector for plotting and the vector for
             #calculating the curve should be simple linearly spaced vectors
@@ -276,21 +276,21 @@ def plotCurveComparisonsLinear(correlations, fittingResult, qIndicies,
             fitTauVector = np.arange(1, len(tauCurve) + 1)
                     / len(timeSpacings) * np.max(timeSpacings)
         fitCurve = fitFunction(fitTauVector, *fitParams[q], q = realQ)
-        
-        plt.plot(tauVector, tauCurve, '-', 
-                color = plt.cm.viridis(i/len(qIndicies)), 
+
+        plt.plot(tauVector, tauCurve, '-',
+                color = plt.cm.viridis(i/len(qIndicies)),
                 label = 'Actual data at q=%d inverse pixels' % q)
-        plt.plot(fitTauVector, fitCurve, '--', 
-                color = plt.cm.viridis(i/len(qIndicies)), 
+        plt.plot(fitTauVector, fitCurve, '--',
+                color = plt.cm.viridis(i/len(qIndicies)),
                 label = 'Fitted curve at q=%d inverse pixels' % q)
     plt.ylabel('\u0394(\u03B4t)')
     plt.xlabel('\u03B4t (Frames)')
     plt.legend()
     plt.title("Linearly Scaled Correlations")
     plt.show()
-    
 
-    
+
+
 """
 Please see description of plotCurveComparisonsLinear above. This serves the
 same purpose, but instead plots on a log scale
@@ -299,7 +299,7 @@ def plotCurveComparisonsLog(correlations, fittingResult, qIndicies,
         *, qCorrection = 1, timeSpacings = None, frameRate = 100):
     fitParams = fittingResult[0]
     fitFunction = fittingResult[2]
-    
+
     for i in range(0,len(qIndicies)):
         q = qIndicies[i]
         if fitParams[q] is None:
@@ -312,20 +312,20 @@ def plotCurveComparisonsLog(correlations, fittingResult, qIndicies,
             dataTauVector = linTauVector / frameRate
         else:
             dataTauVector = timeSpacings
-        
+
         #Makes a log-spaced vector with the same range, for plotting fit
-        logTauVector = np.logspace(np.log10(np.min(dataTauVector)), 
+        logTauVector = np.logspace(np.log10(np.min(dataTauVector)),
                 np.log10(np.max(dataTauVector)), num = len(tauCurve))
-        #Have to use scatter for the data points, as it looks quite badly 
+        #Have to use scatter for the data points, as it looks quite badly
         #distorted using a line at low delta T
         #viridis is the colour map used, set up to evenly space across the map
         #for maximum clarity
-        plt.scatter(dataTauVector, tauCurve, 
-                color = plt.cm.viridis(i/len(qIndicies)), 
+        plt.scatter(dataTauVector, tauCurve,
+                color = plt.cm.viridis(i/len(qIndicies)),
                 label = 'Actual data at q=%d inverse pixels' % q)
-        plt.plot(logTauVector, 
-                fitFunction(logTauVector, *fitParams[q], q = realQ), '--', 
-                color = plt.cm.viridis(i/len(qIndicies)), 
+        plt.plot(logTauVector,
+                fitFunction(logTauVector, *fitParams[q], q = realQ), '--',
+                color = plt.cm.viridis(i/len(qIndicies)),
                 label = 'Fitted curve at q=%d inverse pixels' % q)
     plt.xscale('symlog')
     plt.ylabel('\u0394(\u03B4t)')
@@ -338,8 +338,8 @@ def plotCurveComparisonsLog(correlations, fittingResult, qIndicies,
     plt.show()
 
 """
-Returns an array of numpy arrays representing the fitted points generated by 
-the provided fittingResult tuple at the given time spacings or 
+Returns an array of numpy arrays representing the fitted points generated by
+the provided fittingResult tuple at the given time spacings or
 frame rate + number of frames
 Defaults to linear spacing from 10ms to 10s.
 Ignores the frame rate and number of frames if given a time spacings vector
@@ -357,7 +357,7 @@ qCorrection: float, size of pixel in um.
 RETURN: 2D array, indexed by [frame number, q within qIndicies], holding the
 curves, the first curve being return[:, 0]
 """
-def generateFittedCurves(fittingResult, qIndicies, *, timeSpacings = None, 
+def generateFittedCurves(fittingResult, qIndicies, *, timeSpacings = None,
         frameRate = 100, numFrames = 1000, qCorrection = 1):
     fitParams = fittingResult[0]
     fitFunction = fittingResult[2]
@@ -366,7 +366,7 @@ def generateFittedCurves(fittingResult, qIndicies, *, timeSpacings = None,
             tauVector = np.arange(1/frameRate, (numFrames + 1) / frameRate, 1/frameRate)
     else:#Or the manually provided values
         tauVector = timeSpacings
-    
+
     curves = []
     for q in qIndicies:
         #Ignores values with no given fit parameters
@@ -377,7 +377,7 @@ def generateFittedCurves(fittingResult, qIndicies, *, timeSpacings = None,
         curves.append(fitCurve)
     #Casts to numpy array for usability elsewhere
     return np.array(curves)
-    
+
 
 """
 This is primarily just test code, but you might find a use for it. For each q,
@@ -407,26 +407,26 @@ def compareFittings(fitA, fitB, correlations, qIndicies, *, qCorrection = 1, tim
     plt.legend()
     plt.title("Linearly Scaled Comparison")
     plt.show()
- 
+
 """
 THIS IS NOT PRODUCTION CODE, A FINISHED SYSTEM SHOULD NEVER RUN THIS
-Use this if you just want to run this process in the console quickly, from a 
+Use this if you just want to run this process in the console quickly, from a
 file. This is incredibly useful for debugging. It loads in correlations, treats
 the first slice as the time spacings (what we expect from the main process),
 calculates the fittings, and displays the result, including a diffusivity curve
-It returns the correlations and the fitting result tuple. 
-""" 
-def bootstrap(path, qValues, fitting, *, weighting = ("linear",(1,)), 
+It returns the correlations and the fitting result tuple.
+"""
+def bootstrap(path, qValues, fitting, *, weighting = ("linear",(1,)),
         zoom = 0.71):
     loadedData = np.loadtxt(path)
     #Assumes that it has been given data with time spacings at the start
     loadedCorrelations = loadedData[:,1:]
     timeSpacings = loadedData[:,0]
     qCorrection = (2*np.pi*zoom/((loadedCorrelations.shape[1])*2))
-    fittingResult = fitCorrelationsToFunction(loadedCorrelations, qValues, 
-        fitting, weighting = weighting, qCorrection = qCorrection, 
+    fittingResult = fitCorrelationsToFunction(loadedCorrelations, qValues,
+        fitting, weighting = weighting, qCorrection = qCorrection,
         timeSpacings = timeSpacings)
-    plotCurveComparisonsLog(loadedCorrelations, fittingResult, (100,300,500), 
+    plotCurveComparisonsLog(loadedCorrelations, fittingResult, (100,300,500),
             qCorrection= qCorrection, timeSpacings = timeSpacings)
     DList = []
     for fitTuple in fittingResult[0]:
