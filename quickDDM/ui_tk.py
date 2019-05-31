@@ -78,7 +78,8 @@ class LoadFrame(Frame):
         filename = askopenfilename(initialdir = '../tests/data',
                                    title = 'Select video file',
                                    filetypes = (('avi files', '*.avi'),
-                                                ('all files','*.*')))
+                                                ('mp4 files', '*.mp4'),
+                                                ('all files', '*.*')))
         if not filename:
             return # file selector aborted
 
@@ -363,7 +364,7 @@ class LoadFrame(Frame):
             procGPU = Radiobutton(fProc, text='GPU', value=BACKEND_GPU, variable=self.backendChoice)
             procGPU.grid(row=0, column=1)
 
-            self.backendChoice.set(BACKEND_CPU) # Preselect CPU
+            self.backendChoice.set(BACKEND_GPU) # Preselect CPU
             procCPU['width'] = len(timeLinear['text']) # Align radio buttons
             procCPU['anchor'] = W
             timeLinear['width'] = len(timeLinear['text'])
@@ -799,8 +800,11 @@ def center(win):
     h = win.winfo_height()
 
     # and move back onscreen at correct position
-    x = ((ww//2) - (w//4))
-    y = ((wh//2) - (h//2))
+    # x = ((ww//2) - (w//4))
+    # y = ((wh//2) - (h//2))
+
+    x = w // 4
+    y = h // 4
 
 
     win.geometry(f'+{x}+{y}') # And set them

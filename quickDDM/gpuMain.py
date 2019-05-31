@@ -26,29 +26,11 @@ from calculateCorrelation import calculateCorrelation
 
 
 
-def createFFTKernel(thread, shape):
-    footprint = thread.array(shape, dtype=numpy.complex)
-    fft = FFT(footprint).compile(thread)
-    return fft
-
-def createNormalisationKernel(thread, shape):
-    footprint = thread.array(shape, dtype=numpy.complex)
-    fftshift = FFTShift(footprint)
-
-    div = div_const(footprint, numpy.sqrt(numpy.prod(shape)))
-    norm = norm_const(footprint, 2)
-
-    fftshift.parameter.output.connect(div, div.input, output_prime=div.output)
-    fftshift.parameter.output_prime.connect(norm, norm.input, output_prime_2=norm.output)
-
-    normalise = fftshift.compile(thread)
-    return normalise
-
 """
 Compiles a kernel to calculate the 2D FFT of a frame
-Also divides by scaling factor, but doesn't move to real domain
+Also divides by scaling factor, but doesn't move to real domain or fftshift
 """
-def createComplex2DFFT(thread, shape):
+def createComplexFFTKernel(thread, shape):
     scaling = numpy.sqrt(shape[-2] * shape[-1])
     footprint = thread.array(shape, dtype=numpy.complex128)
     fft = FFT(footprint)
@@ -57,6 +39,19 @@ def createComplex2DFFT(thread, shape):
     fft.parameter.output.connect(div, div.input, output_prime=div.output)
 
     return fft.compile(thread)
+
+"""
+Creates a kernel to make a frame real, as well as fftshift
+"""
+def createNormalisationKernel(thread, shape):
+    footprint = thread.array(shape, dtype=numpy.complex)
+    fftshift = FFTShift(footprint)
+
+    norm = norm_const(footprint, 2)
+    fftshift.parameter.output.connect(norm, norm.input, output_prime=norm.output)
+
+    normalise = fftshift.compile(thread)
+    return normalise
 
 
 """
@@ -74,11 +69,9 @@ def runKernelOperation(thread, kernel, frame):
 
     devFr = thread.to_device(frame) # Send frame to device
     fBuffer = thread.array(frame.shape, dtype=numpy.complex128)
-    f2 = thread.array(frame.shape, dtype=numpy.complex128)
 
     kernel(fBuffer, devFr)
     return fBuffer
-
 
 
 
@@ -118,7 +111,8 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
 
     # need to compile an OpenCL kernel to calculate FFTs with
     size = [d-1 for d in videoInput[0].shape]
-    fftComplex = createComplex2DFFT(thr, size)
+    fftComplex = createComplexFFTKernel(thr, size)
+    fftNorm = createNormalisationKernel(thr, size)
 
 
 
@@ -161,8 +155,8 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
             transformShape = (videoInput.shape[1] - 1, (videoInput.shape[2] - 1)//2 + 1)
         else:
             #+1 for the real transform correction, -1 to drop a sample based on MATLAB
-            transformShape = (videoInput.shape[1] - 1,(videoInput.shape[2]+1-1)//2)"""
-        transformShape = (videoInput.shape[1] -1, videoInput.shape[2] -1)
+            transformShape = (videoInput.shape[1] - 1, (videoInput.shape[2]+1-1)//2)"""
+        transformShape = (videoInput.shape[1] - 1, videoInput.shape[2] - 1)
         totalDifferencesShape = (framesPerSlice, transformShape[0], transformShape[1])
         #Preparing the destination of the frame differences
         totalDifferences = numpy.zeros(totalDifferencesShape)
@@ -175,10 +169,10 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
                 currentSlice.popleft()
             #Get a new value into the slice queue
             #Also drops a row and column
-            currentSlice.append(runKernelOperation(thr, fftComplex, videoInput[baseIndex,:-1,:-1]))
+            currentSlice.append(runKernelOperation(thr, fftComplex, videoInput[baseIndex, :-1, :-1]))
             baseIndex += 1
             #Drops a row and column
-            head = videoInput[headIndex,:-1,:-1]
+            head = videoInput[headIndex, :-1, :-1]
             head = runKernelOperation(thr, fftComplex, head)
 
             #time difference between this frame and the first in the queue
@@ -191,18 +185,23 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
                     progress.setProgress(framesProcessed, target)
 
                 difference = head - currentSlice[sliceFrameIndex]
-                totalDifferences[relativeDifference,:,:] += castToReal(difference.get())
+                normalFrame = thr.array(size, dtype=numpy.float64)
+                fftNorm(normalFrame, difference)
+                print(normalFrame.shape)
+
+                totalDifferences[relativeDifference, :, :] += normalFrame.get()
+
                 numDifferences[relativeDifference] += 1
                 relativeDifference += 1
 
                 if abortFlag: return None
 
-        for relativeDifference in range(0,len(currentSlice)):
+        for relativeDifference in range(0, len(currentSlice)):
             if progress is not None:
                 framesProcessed += qProgress / len(currentSlice)
                 progress.setProgress(framesProcessed, target)
 
-            meanDifference = (totalDifferences[relativeDifference,:,:] / numDifferences[relativeDifference])
+            meanDifference = (totalDifferences[relativeDifference, :, :] / numDifferences[relativeDifference])
             timeDifference = relativeDifference + sliceSpacing * framesPerSlice
             correlations[timeDifference] = calculateWithCalls(meanDifference)
 
@@ -216,7 +215,7 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
 
 
     frameRate = readFramerate(filename)
-    timeSpacings = numpy.array(numpy.arange(1,len(correlations) + 1)) / frameRate
+    timeSpacings = numpy.array(numpy.arange(1, len(correlations) + 1)) / frameRate
     # This is how you stack arrays in numpy, apparently 🙃
     outputMatrix = numpy.c_[timeSpacings, correlations]
 
