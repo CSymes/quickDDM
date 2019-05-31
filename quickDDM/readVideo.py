@@ -33,7 +33,38 @@ def readVideo(file):
         readStatus, frameBuffer = videoFile.read()
         if not readStatus:
             raise OSError('The video file has an error')
-        videoArray[framesRead] = frameBuffer[:,:,0]
+        videoArray[framesRead] = np.array(frameBuffer[:,:,0])
         framesRead += 1
     videoFile.release()
+    #Now we need to see if it should be cast to a square
+    dimensionDifference = pxHeight - pxWidth
+    if dimensionDifference > 0: #Height greater than width
+        leftDrop = int(np.ceil(dimensionDifference / 2))
+        rightDrop = int(np.floor(dimensionDifference / 2))
+        if rightDrop == 0:
+            videoArray = videoArray[:,leftDrop:,:]
+        else:
+            videoArray = videoArray[:,leftDrop:-rightDrop,:]
+
+    if dimensionDifference < 0: #Width greater than height
+        dimensionDifference = np.abs(dimensionDifference)
+        leftDrop = int(np.ceil(dimensionDifference / 2))
+        rightDrop = int(np.floor(dimensionDifference / 2))
+        if rightDrop == 0:
+            videoArray = videoArray[:,:,leftDrop:]
+        else:
+            #negative slice index drops the last n elements
+            videoArray = videoArray[:,:,leftDrop:-rightDrop]
+    
     return videoArray
+
+    
+"""
+file: file path to read from, as string
+RETURN: framerate as single float
+"""
+def readFramerate(file):
+    videoFile = cv2.VideoCapture(file)
+    # Successfully opened the video
+    fps = int(videoFile.get(cv2.CAP_PROP_FPS))
+    return fps
