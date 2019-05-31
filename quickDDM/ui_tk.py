@@ -7,11 +7,6 @@ Creates a UI to interface with the program, using the tkinter framework
 @author: Cary
 '''
 
-from readVideo import readVideo
-from frameDifferencer import frameDifferencer
-from twoDFourier import twoDFourier
-from calculateQCurves import calculateQCurves
-from calculateCorrelation import calculateCorrelation
 from curveFitterBasic import fitCorrelationsToFunction, generateFittedCurves
 from basicMain import sequentialChunkerMain
 
@@ -33,14 +28,8 @@ import numpy
 import re
 import random
 
-# from pathos.multiprocessing import Pool as ProcPool
 import concurrent.futures as futures
-# from queue import Queue
 
-# measure (peak) ram usage - 'nix only, sorry
-try: import resource; rRam = True
-except ModuleNotFoundError: rRam = False
-from timeit import default_timer as time
 
 
 WINDOW_PADDING = 10 # pixels
@@ -51,8 +40,8 @@ PREVIEW_DIM = 256 # size of the preview image (pixels, square)
 DEFAULT_SCALING = 0.71 # default scale factor
 
 # Intermodule/function constants
-FITTING_BROWNIAN = 'rising exponential'
-FITTING_DIRECTIONAL = 'TODO'
+FITTING_RISING_EXP = 'rising exponential'
+FITTING_OTHER = 'TODO'
 FITTING_NONE = ''
 
 BACKEND_CPU = 'CPU'
@@ -451,13 +440,16 @@ class ProcessingFrame(Frame):
     ### Processing
 
 
+    """
+    Load previously saved-to-csv results from disk and insert into the analysis area
+    """
     def loadResults(self, fname, progress):
         progress.setText('Loading from disk')
         progress.cycle()
 
-        cold = numpy.loadtxt(fname)
-        self.deltas = cold[:, 0]
-        self.correlation = cold[:, 1:]
+        cold = numpy.loadtxt(fname) # load data from CSV
+        self.deltas = cold[:, 0] # extract time deltas
+        self.correlation = cold[:, 1:] # cut deltas off data
 
         for r in range(1, self.correlation.shape[1]):
             self.results.insert('end', f'q = {r}')
@@ -474,106 +466,6 @@ class ProcessingFrame(Frame):
     Begin the video analysis - see basicMain.py
     Threaded away from the UI, uses CPU
     """
-    def beginAnalysis_CPU_outmoded(self, fname, deltas):
-        startTime = time()
-
-        self.progressBar['mode'] = 'indeterminate'
-        self.progressBar.start()
-        self.stage.set('Loading frames from disk')
-        frames = readVideo(fname)
-        print(f'frames: {len(frames)}')
-
-        print(f'# of deltas: {len(deltas)}')
-        curves = numpy.zeros((len(deltas), len(frames[0])//2)) # store processed data
-
-        if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-        # Configure UI display
-        self.stage.set('Calculating Fouriers')
-        self.progressBar.stop()
-        self.progressBar['mode'] = 'determinate'
-        self.progressBar['maximum'] = len(frames)
-        self.progress.set(0)
-
-
-
-        # Updates progressbar as Fourier transforms calculated
-        def fourierWrapper(frame):
-            # pass a single-item list of frames
-            r = twoDFourier(numpy.asarray([frame])) # Find the transform for this frame
-            self.progress.set(self.progress.get()+1)
-            return r[0]
-
-        # comprehension for all Fourier frames
-        # calculating on a per-frame basis seems not to really be any more expensive
-        a=time()
-        fours = [fourierWrapper(f) for f in frames]
-        print(f'fTime: {time()-a:.2f}')
-        self.stage.set('Optimising Fourier container')
-        if threadKiller: return 'analysis aborted'
-
-        a=time()
-        if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-        # TODO this is a hella expensive op. Maybe just use as a list instead?
-        # if we don't multiprocess this, could just write straight into a blank ndarray
-        fours = numpy.stack(fours) # Numpy-fy
-        # stack() seems slightly faster than asarray()/asanyarray()
-        if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-        print(f'sTime: {time()-a}')
-
-
-
-        print(f'pre-diff-time: {time() - startTime:.2f}')
-        self.progressBar['maximum'] = len(deltas)
-        dTime=0
-        qTime=0
-        for i, spacing in enumerate(deltas):
-            # Configure UI display
-            self.stage.set(f'Processing δt {i+1}/{len(deltas)}')
-            self.progress.set(i)
-
-
-            # Calculate unique data for this frame spacing/delta
-            a=time()          ###
-
-            diff = frameDifferencer(fours, spacing)
-
-            dTime += time()-a ###
-            a=time()          ###
-
-            q = calculateQCurves(diff)
-
-            qTime += time()-a ###
-
-            curves[i] = q
-
-            if threadKiller: return 'analysis aborted'
-
-        for i in range(len(curves)):
-            # Add to the UI listbox
-            self.results.insert('end', f'q = {i}')
-            # self.results.insert('end', f'Δ = {spacing}')
-            # Select this entry in the list if all other entries selected
-            if (len(self.results.curselection()) == i):
-                self.results.select_set(i)
-
-        print(f'dTime: {dTime:.2f}')
-        print(f'qTime: {qTime:.2f}')
-
-
-        self.progress.set(len(deltas)-0.5)
-        self.stage.set('Forming correlation function')
-        self.correlation = calculateCorrelation(curves)
-        print(f'curves size: {curves.shape}')
-        print(f'cofunc size: {self.correlation.shape}')
-
-        self.progress.set(len(deltas))
-        self.stage.set('Done!')
-
-        if rRam: print('ram:', resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-        print(f'total time: {time() - startTime:.2f}')
-
-        return 'analysis complete'
-
     def beginAnalysis_CPU(self, fname, deltas, progress):
         progress.setText('Processing')
         progress.cycle()
@@ -599,13 +491,12 @@ class ProcessingFrame(Frame):
         if self.correlation is None:
             return
 
-        # TODO save metadata
-
         filename = asksaveasfilename(initialdir = '.',
                                      title = 'Select save location',
                                      filetypes = (('Comma Seperated Values', '*.csv'),))
         if not filename:
             return # file selector aborted
+        saveConfig = True
 
         # Split IO onto its own thread
         def save(self, fn):
@@ -613,9 +504,15 @@ class ProcessingFrame(Frame):
             r = f'saved {len(self.correlation)} rows to {fn}'
 
             if self.fitCurves is not None:
-                # Append add '_fitting' to filename and save as csv
+                # Append '_fitting' to filename and save as csv
                 fn_fit = re.sub(r'\.csv$', '', fn) + '_fitting.csv'
                 numpy.savetxt(fn_fit, self.fitCurves, delimiter=' ')
+
+            if saveConfig:
+                # Append '_config' to filename and save metadata
+                fn_config = re.sub(r'\.csv$', '', fn) + '_config.csv'
+                with open(fn_config, 'w') as f:
+                    f.write(f'TODO') # TODO
 
 
         startThread(save, self, filename)
@@ -776,25 +673,25 @@ class ProcessingFrame(Frame):
         fFitting = Frame(self)
         fFitting.grid(row=0, column=2, sticky=E)
         if fFitting:
-            lFitting = Label(fFitting, text='Curve fitting, assuming: ')
+            lFitting = Label(fFitting, text='Curve Fitting: ')
             lFitting.grid(row=0, column=0)
 
             self.fitChoice = StringVar()
-            bBrownian = Radiobutton(fFitting, text='Brownian Motion', indicatoron=0, variable=self.fitChoice,
-                                    value=FITTING_BROWNIAN, command=self.triggerCurveFit)
-            bDirectional = Radiobutton(fFitting, text='Directional Motion', indicatoron=0, variable=self.fitChoice,
-                                    value=FITTING_DIRECTIONAL, command=self.triggerCurveFit)
+            bFitExp = Radiobutton(fFitting, text='Rising Exponential', indicatoron=0, variable=self.fitChoice,
+                                    value=FITTING_RISING_EXP, command=self.triggerCurveFit)
+            bFitOther = Radiobutton(fFitting, text='Other...', indicatoron=0, variable=self.fitChoice,
+                                    value=FITTING_OTHER, command=self.triggerCurveFit)
             bNone = Radiobutton(fFitting, text='No Fitting', indicatoron=0, variable=self.fitChoice,
                                     value=FITTING_NONE, command=self.triggerCurveFit)
 
-            bSave = Button(fFitting, text='Save All to Disk...', command=self.saveAllData)
+            bSave = Button(fFitting, text='Save Data to Disk...', command=self.saveAllData)
 
-            bBrownian.grid(row=0, column=1)
-            bDirectional.grid(row=0, column=2, padx=(WINDOW_PADDING, WINDOW_PADDING))
+            bFitExp.grid(row=0, column=1)
+            bFitOther.grid(row=0, column=2, padx=(WINDOW_PADDING, WINDOW_PADDING))
             bNone.grid(row=0, column=3, padx=(WINDOW_PADDING, WINDOW_PADDING*4))
             bSave.grid(row=0, column=4)
 
-            bDirectional['state'] = 'disabled' # TODO directional fitting
+            bFitOther['state'] = 'disabled' # TODO directional fitting
 
         # matplotlib figure on the right
         pFigure = Figure(figsize=(10, 6), dpi=100)
@@ -824,32 +721,33 @@ class ProcessingFrame(Frame):
 class ExitWrapper():
     def __init__(self): self.exit = False
     def __bool__(self): return self.exit
-    def set(self, v): self.exit = v
+    def set(self): self.exit = True
 
+"""Wrapper around the progressbar elements of the UI, allows easy updating of it"""
 class ProgressWrapper():
     def __init__(self, text, bar, barval):
-        self.text = text
-        self.bar = bar
-        self.bar_value = barval
+        self.text = text # Text area above the progress bar
+        self.bar = bar # the bar itself
+        self.bar_value = barval # the IntVar holding the bar's state
 
         self.setText = self.text.set
 
     def setPercentage(self, pc):
-        # import code
-        # code.interact(local=dict(globals(), **locals()))
+        # Abort if it's currently cycling
         if self.bar['mode'].string == 'indeterminate':
             self.bar.stop()
             self.bar['mode'] = 'determinate'
 
-        self.bar_value.set(pc)
+        self.bar_value.set(pc) # Set current progress
 
     def setProgress(self, current, target):
+        # Convert to a percentage and set to that
         self.setPercentage(100*current/target)
 
     def cycle(self):
-        self.setPercentage(0)
-        self.bar['mode'] = 'indeterminate'
-        self.bar.start()
+        self.setPercentage(0) # reset to 0
+        self.bar['mode'] = 'indeterminate' # cycling rather than filling
+        self.bar.start() # begin auto-incrementing
 
 
 """
@@ -927,7 +825,7 @@ if __name__ == '__main__':
         window.after(100, checkThreads)
 
         def onQuit():
-            threadKiller.set(True)
+            threadKiller.set()
             if loader.winfo_exists(): # Only query if analysis has begun # TODO don't question it if results saved to disk?
                 pass
                 # if askokcancel('Abort?', 'Are you sure you want to abort analysis?', default='cancel'):
