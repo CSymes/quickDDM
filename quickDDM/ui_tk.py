@@ -9,6 +9,7 @@ Creates a UI to interface with the program, using the tkinter framework
 
 from curveFitterBasic import fitCorrelationsToFunction, generateFittedCurves
 from basicMain import sequentialChunkerMain
+from gpuMain import sequentialGPUChunker
 
 from tkinter import *
 from tkinter.ttk import Frame, Progressbar, Scrollbar, Entry
@@ -367,7 +368,6 @@ class LoadFrame(Frame):
             procCPU['anchor'] = W
             timeLinear['width'] = len(timeLinear['text'])
             timeLinear['anchor'] = W
-            procGPU['state'] = 'disabled' # TODO
 
         # Button to progress to next stage
         lLoad = Button(self, text='Analyse Video', command=self.triggerAnalysis)
@@ -477,14 +477,24 @@ class ProcessingFrame(Frame):
         for r in range(1, self.correlation.shape[1]):
             self.results.insert('end', f'q = {r}')
 
-        return 'analysis complete'
+        return 'CPU analysis complete'
 
     """
     Begin the video analysis - see gpuMain.py
     Threaded, plus uses GPU acceleration
     """
     def beginAnalysis_GPU(self, fname, deltas, progress):
-        pass # TODO
+        progress.setText('Processing')
+        progress.cycle()
+
+        self.correlation = sequentialGPUChunker(fname, deltas, progress=progress, abortFlag=threadKiller)
+
+        if self.correlation is None: return 'thread aborted'
+
+        for r in range(1, self.correlation.shape[1]):
+            self.results.insert('end', f'q = {r}')
+
+        return 'GPU analysis complete'
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self):
@@ -496,6 +506,9 @@ class ProcessingFrame(Frame):
                                      filetypes = (('Comma Seperated Values', '*.csv'),))
         if not filename:
             return # file selector aborted
+        if not filename.endswith('.csv'):
+            filename += '.csv'
+        # TODO check for file collision?
         saveConfig = True
 
         # Split IO onto its own thread
@@ -526,6 +539,8 @@ class ProcessingFrame(Frame):
             self.plotFits.pop().remove()
         self.mpl.relim()
 
+        numPlottedCurves = 0
+
         # and create the new ones
         for i in self.results.curselection():
             # Extract frame q value from the human-readable string
@@ -540,7 +555,10 @@ class ProcessingFrame(Frame):
             curveRef = self.mpl.plot(range(len(data)), data, '-', color=colour)[0]
             self.plotCurves.append(curveRef)
 
-            curveRef.set_label(f'q = {d}')
+            # too many legends breaks the layout
+            if numPlottedCurves < 10:
+                curveRef.set_label(f'q = {d}')
+            numPlottedCurves += 1
 
             if self.fitCurves is not None: # avoid "no handles" MPL warning
                 fitData = self.fitCurves[d, :]
