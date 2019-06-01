@@ -7,9 +7,25 @@ Creates a UI to interface with the program, using the tkinter framework
 @author: Cary
 '''
 
+HAS_BACKEND_GPU = False
+
 from curveFitterBasic import fitCorrelationsToFunction, generateFittedCurves
 from basicMain import sequentialChunkerMain
-from gpuMain import sequentialGPUChunker
+try: # Attempt to load GPU backend, and check if hardware/drivers are present
+    from gpuMain import sequentialGPUChunker
+
+    try:
+        from pyopencl._cl import LogicError
+        import reikna
+        reikna.cluda.ocl_api().Thread.create()
+
+        HAS_BACKEND_GPU = True
+    except LogicError:
+        print('[Warning] Either no GPU hardware is present, '
+              'or the OpenCL libraries are not installed. '
+              'Disabling GPU backend.')
+except ModuleNotFoundError:
+    print('[Warning] Please install PyOpenCL & Reikna to use the GPU backend')
 
 from tkinter import *
 from tkinter.ttk import Frame, Progressbar, Scrollbar, Entry
@@ -136,6 +152,7 @@ class LoadFrame(Frame):
         # File didn't open - not a video, corrupt, read error, or whatever else it could be
         else:
             self.clearPreviews() # filepath no longer valid - clear any previous preview data
+            print(f'Poor file choice "{filename}"')
 
             messagebox.showerror('File Error',
                                  'There was an issue with loading or accessing the '
@@ -365,6 +382,10 @@ class LoadFrame(Frame):
             procGPU.grid(row=0, column=1)
 
             self.backendChoice.set(BACKEND_GPU) # Preselect CPU
+            if HAS_BACKEND_GPU == False:
+                self.backendChoice.set(BACKEND_CPU)
+                procGPU['state'] = 'disabled'
+
             procCPU['width'] = len(timeLinear['text']) # Align radio buttons
             procCPU['anchor'] = W
             timeLinear['width'] = len(timeLinear['text'])
