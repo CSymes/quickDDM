@@ -3,7 +3,7 @@
 """
 Created on Wed Mar 27 11:06:47 2019
 Takes in atransform array, does the averaging and squaring within
-each time step, then computes the real Q curve 
+each time step, then computes the real Q curve
 (equivalent to each list item)
 @author: Lionel
 """
@@ -28,7 +28,7 @@ def calculateQCurves(fourierDifferences):
     #This hot mess gets the radial values as integers, with appropriate rounding
     radiusGrid = np.around(np.sqrt(np.square(yGrid) + np.square(xGrid)),0).astype(np.int16)
     yRange, xRange, xGrid, yGrid = 0, 0, 0, 0
-    
+
     #Removing the centre values
     radiusGrid[:,xSize//2] = -1
     radiusGrid[ySize//2,:] = -1
