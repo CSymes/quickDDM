@@ -14,6 +14,7 @@ if __name__ == '__main__':
     command = (r'pyinstaller quickDDM/ui_tk.py -y '
                r'-p "./quickDDM" '
                r'--onefile '
+               r'--noconsole '
                r'--exclude-module libopenblas '
               fr'--add-data "{r_p};reikna" '
               fr'--add-binary "{cv_p}/opencv_ffmpeg400_64.dll;."')
