@@ -90,3 +90,18 @@ steps:
     python publish.py
   displayName: 'Create Windows Build'
   condition: eq( variables.platform, 'windows' )
+
+- task: CopyFiles@2
+  inputs:
+    sourceFolder: 'dist'
+    contents: '*.exe'
+    targetFolder: $(Build.ArtifactStagingDirectory)
+  displayName: 'Stage artifact'
+  condition: eq( variables.platform, 'windows' )
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathtoPublish: $(Build.ArtifactStagingDirectory)
+    artifactName: WindowsArtifacts
+  displayName: 'Publish artifact'
+  condition: eq( variables.platform, 'windows' )
