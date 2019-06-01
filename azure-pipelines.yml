@@ -10,8 +10,12 @@ strategy:
 pool:
   vmImage: $(imageName)
 
+
+
+# Environment commissioning
+
 steps:
-# Use Python version 3.6
+# Using Python version 3.6
 - task: UsePythonVersion@0
   inputs:
     versionSpec: '3.6'
@@ -21,13 +25,22 @@ steps:
     python -m pip install --upgrade pip setuptools wheel
   displayName: 'Install tools'
 
+# Provided by https://www.lfd.uci.edu/~gohlke/pythonlibs/
+# Caching a copy of it on Azure so we don't hit their servers every build
+- task: DownloadSecureFile@1
+  inputs:
+    secureFile: 'pyopencl-2018.2.5+cl12-cp36-cp36m-win_amd64.whl'
+  displayName: 'Pre-fetch PyOpenCL'
+  condition: eq( variables.platform, 'windows' )
+
 - bash: |
-    if [[ $(platform) == "_skip_" ]]; then
-      pip install -r requirements.txt
-    else
-      pip install $(grep -ivE "pyopencl" requirements.txt)
-    fi
+    pip install $(grep -ivE "pyopencl" requirements.txt)
     pip install unittest-xml-reporting
+
+    # Install PyOpenCL
+    if [[ $(platform) == "windows" ]]; then
+      pip install "$(DownloadSecureFile.secureFilePath)"
+    fi
   displayName: 'Install requirements'
 
 - bash: |
@@ -55,6 +68,10 @@ steps:
   displayName: 'Install OpenCL (ROCm)'
   condition: eq( variables.platform, '_skip_' )
 
+
+
+# Run all tests
+
 - bash: |
     mkdir tests_gpu
     mv tests/testGPUProcessing.py tests_gpu/ 2>/dev/null
@@ -69,36 +86,43 @@ steps:
     python -m xmlrunner discover tests_gpu -v -o /tmp/test_results_$(platform)
   displayName: 'Run GPU tests'
   condition: eq( variables.platform, '_skip_' )
-# Can't get an OpenCL runtime to work on Azure
+# Can't get an OpenCL runtime to work on Azure, even on CPU
 
 - task: PublishTestResults@2
   inputs:
     testResultsFormat: 'JUnit'
-    testResultsFiles: '**/TEST-*.xml'
+    testResultsFiles: '*.xml'
     searchFolder: '/tmp/test_results_$(platform)/'
     mergeTestResults: true
     failTaskOnFailedTests: true
-  condition: succeededOrFailed()
+  condition: and( succeededOrFailed(), eq( variables.platform, 'linux') )
+# Not sure why, but Windows can't find the tests anymore
 
 - bash: |
     cp tests/data/10frames.avi tests/data/timing.avi
     python timing.py
   displayName: 'Run program timer'
 
+
+
+# Creates a .exe build of the whole program
+
 - script: |
     pip install pypiwin32 pyinstaller
     python publish.py
+    mv ./dist/ui_tk.exe ./quickDDM.exe
   displayName: 'Create Windows Build'
   condition: eq( variables.platform, 'windows' )
 
 - task: CopyFiles@2
   inputs:
-    sourceFolder: 'dist'
+    sourceFolder: '.'
     contents: '*.exe'
     targetFolder: $(Build.ArtifactStagingDirectory)
   displayName: 'Stage artifact'
   condition: eq( variables.platform, 'windows' )
 
+# Publishes the zipped exe to the Azure TFS storage and links to the build
 - task: PublishBuildArtifacts@1
   inputs:
     pathtoPublish: $(Build.ArtifactStagingDirectory)
