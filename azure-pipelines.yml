@@ -84,3 +84,9 @@ steps:
     cp tests/data/10frames.avi tests/data/timing.avi
     python timing.py
   displayName: 'Run program timer'
+
+- script: |
+    pip install pypiwin32 pyinstaller
+    python publish.py
+  displayName: 'Create Windows Build'
+  condition: eq( variables.platform, 'windows' )
