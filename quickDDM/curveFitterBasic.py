@@ -46,7 +46,7 @@ def risingExponential(deltaT, A, B, D, *, q):
    
 """
 This is the dictionary from which to access fitting functions. Modify this here
-whenever a new weighting scheme is added. DO NOT modify this during execution.
+whenever a new fitting model is added. DO NOT modify this during execution.
 Each entry should be addressed by a string, and have a value that is a fitting
 function.
 """
@@ -90,7 +90,7 @@ def risingExponentialGuess(correlation):
     
 """
 This is the dictionary from which to access intial guess functions. Modify this
-here whenever a new weighting scheme is added. DO NOT modify this during
+here whenever a new fitting model is added. DO NOT modify this during
 execution.
 There MUST be an entry for each fitting model; if estimates are not desired,
 use None.
@@ -98,63 +98,6 @@ use None.
 GUESS_FUNCTIONS ={
     "rising exponential":risingExponentialGuess,
     "linear":None
-}
-   
-"""
-These functions are used to create tau vectors to downsample the provided
-correlation curve. They take parameters of 
-(correlationCurve, sampleParams)
-where correlationCurve is a single vector from the correlation function and 
-sampleParams is a tuple of floats that serve as the parameters of the function
-The sampleParams are a tuple so that different schemes may use different 
-parameters
-RETURN: a vector of integers from 1 to some values less than 
-len(correlationCurve), that may be used to index correlationCurve.
-available weighting schemes:
-    linear: takes linearly spaced samples. One param, the spacing desired,
-    should be >= 1 to avoid repeated elements.
-    log: baises towards early values by using exponentially spaced samples.
-    One param how many samples should be taken per decade. All available
-    samples are taken in the first 10, as these are the most important for
-    fitting.
-    percentile: Excludes values after the first element that exceeds the nth
-    percentile of the curve. One param, the percentile to cut off at. 
-    This gives a much shorter vector, and needs more understanding of the 
-    expected curve than the others.
-"""
-
-def linearSpacing(correlationCurve, sampleParams):
-    spacing = sampleParams[0]
-    return np.arange(0,len(correlationCurve), spacing).astype(int)
-
-def expSpacing(correlationCurve, sampleParams):
-    perDecade = sampleParams[0]
-    #Because we always want the first ten values
-    zeroToNine = np.arange(0,10)
-    #exponential spacings from 10 to the end
-    expTauVector = pow(10, np.arange(1,np.log10(len(correlationCurve)),
-            1/perDecade))
-    #Cast to integer so it can be used to index
-    expTauVector = np.concatenate((oneToNine, expTauVector)).astype(int)
-    return expTauVector
-   
-def percentileSpacing(correlationCurve, sampleParams):
-    percent = sampleParams[0]
-    medianIntensity = np.percentile(correlationCurve, percent)
-    exceedingElements = np.where(correlationCurve > medianIntensity)
-    lastIndex = exceedingElements[0][0]
-    tauVector = np.arange(0,lastIndex).astype(int)
-    return tauVector
-    
-"""
-This is the dictionary from which to access weighting schemes. Modify this here
-whenever a new weighting scheme is added. DO NOT modify this during execution.
-"""
-WEIGHTING_SCHEMES ={
-    #More can be added here as required
-    "linear": linearSpacing,
-    "log": expSpacing,
-    "percentile": percentileSpacing
 }
 
 """
@@ -166,9 +109,6 @@ qValues: list of int, q values at which to fit, in pixels, used to index
     correlation matrix
 fitting: string specifying which function to use as the model, see 
     FITTING_FUNCTIONS aboves
-weighting: tuple(String,(*float)) how to bias the sampling (log, linear, etc)
-    The floating point tuple is the parameter for the weighting, e.g how many
-    samples per decade to take in exponential spacing
 qCorrection: float, size of pixel in um. Calculated elsewhere.
 timeSpacings: array(float), optional parameter, manually sets the time spacing
     between frames (can be nonlinear). If not provided, frames area ssumed to
@@ -185,22 +125,16 @@ elsewhere
 
 A future project would do well to use named tuples for the output if any futher
 functionality is required; this is unweildy as it is now.
-
-It is very possible that the weighting component is unneded. Consider dropping
-it if it isn't useful. Alternatively, just don't pass anything and it will use
-the default, which is normally appropriate
 """
 def fitCorrelationsToFunction(correlations, qValues, fitting, *, 
-        weighting = ("linear", (1,)), qCorrection = 1, 
-        timeSpacings = None, frameRate = 100):
+        qCorrection = 1, timeSpacings = None, frameRate = 100):
     paramResults = [None] * correlations.shape[1]
     
-    scheme = WEIGHTING_SCHEMES[weighting[0]]
     guessGenerator = GUESS_FUNCTIONS[fitting]
     fittingFunction = FITTING_FUNCTIONS[fitting]
     for q in qValues:
         #Choosing which samples to take, defaults to all
-        tauVector = scheme(correlations[:,q], weighting[1])
+        tauVector = np.arange(0,len(correlations[:,q])).astype(int)
         #The correlations at this q value
         tauCurve = correlations[tauVector,q]
         if timeSpacings is None:
@@ -416,15 +350,14 @@ the first slice as the time spacings (what we expect from the main process),
 calculates the fittings, and displays the result, including a diffusivity curve
 It returns the correlations and the fitting result tuple. 
 """ 
-def bootstrap(path, qValues, fitting, *, weighting = ("linear",(1,)), 
-        zoom = 0.71):
+def bootstrap(path, qValues, fitting, *, zoom = 0.71):
     loadedData = np.loadtxt(path)
     #Assumes that it has been given data with time spacings at the start
     loadedCorrelations = loadedData[:,1:]
     timeSpacings = loadedData[:,0]
     qCorrection = (2*np.pi*zoom/((loadedCorrelations.shape[1])*2))
     fittingResult = fitCorrelationsToFunction(loadedCorrelations, qValues, 
-        fitting, weighting = weighting, qCorrection = qCorrection, 
+        fitting, qCorrection = qCorrection, 
         timeSpacings = timeSpacings)
     plotCurveComparisonsLog(loadedCorrelations, fittingResult, (100,300,500), 
             qCorrection= qCorrection, timeSpacings = timeSpacings)
