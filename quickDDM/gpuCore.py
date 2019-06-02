@@ -19,8 +19,6 @@ from reikna.transformations import norm_const, div_const
 from collections import deque
 
 from readVideo import readVideo, readFramerate
-from frameDifferencer import frameDifferencer
-from twoDFourier import twoDFourier, castToReal
 from calculateQCurves import calculateWithCalls
 from calculateCorrelation import calculateCorrelation
 
@@ -127,10 +125,6 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
     # The number of different slice intervals that must be taken
     numSpacingSets = int(numpy.ceil((numFrames -1) / framesPerSlice))
 
-    print('numSpacingSets:', numSpacingSets)
-    print('framesPerSlice:', framesPerSlice)
-    print('complexFrameByteSize:', complexFrameByteSize)
-
     # Used to show progress in the UI
     framesProcessed = 0
     target = numFrames * (numFrames - 1) / 2 # algorithm complexity
@@ -187,7 +181,6 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
                 difference = head - currentSlice[sliceFrameIndex]
                 normalFrame = thr.array(size, dtype=numpy.float64)
                 fftNorm(normalFrame, difference)
-                print(normalFrame.shape)
 
                 totalDifferences[relativeDifference, :, :] += normalFrame.get()
 
