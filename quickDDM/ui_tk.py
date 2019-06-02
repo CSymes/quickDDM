@@ -657,7 +657,7 @@ class ProcessingFrame(Frame):
             # Find fitted equation paramaters
             fit = fitCorrelationsToFunction(self.correlation, qPoints, model, qCorrection=corrQ, timeSpacings=self.deltas)
             # and generate plots with that data
-            self.fitCurves = generateFittedCurves(fit, qPoints, frameRate=self.fps, numFrames=self.numFrames, qCorrection=corrQ)
+            self.fitCurves = generateFittedCurves(fit, qPoints, timeSpacings=self.deltas, frameRate=self.fps, numFrames=self.numFrames, qCorrection=corrQ)
             # First curve doesn't get a fit, but good to preserve dimensions anyway, so insert a dummy row
             self.fitCurves = numpy.concatenate((numpy.zeros((1, self.fitCurves.shape[1])), self.fitCurves), 0)
 
