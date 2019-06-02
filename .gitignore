@@ -97,8 +97,16 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
+# Sublime project settings
+*.sublime-project
+*.sublime-workspace
+
 # mkdocs documentation
 /site
 
 # mypy
 .mypy_cache/
+
+
+
+tests/data/timing.avi

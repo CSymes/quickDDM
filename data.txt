@@ -1,0 +1,1 @@
+No database is used by the project. Sample video files may be found in tests\data\

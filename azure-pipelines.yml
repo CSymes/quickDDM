@@ -1,28 +1,132 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
-trigger:
-- master
+strategy:
+  matrix:
+    win2016:
+      imageName: 'vs2017-win2016'
+      platform: 'windows'
+    linux:
+      imageName: 'ubuntu-16.04'
+      platform: 'linux'
 
 pool:
-  vmImage: 'windows-2019'
+  vmImage: $(imageName)
+
+
+
+# Environment commissioning
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
-
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
-
-# Use Python version 3.6
+# Using Python version 3.6
 - task: UsePythonVersion@0
   inputs:
-    versionSpec: '3.6' 
-    addToPath: true 
+    versionSpec: '3.6'
+    addToPath: true
     architecture: 'x64'
+- bash: |
+    python -m pip install --upgrade pip setuptools wheel
+  displayName: 'Install tools'
 
-- script: python --version
+# Provided by https://www.lfd.uci.edu/~gohlke/pythonlibs/
+# Caching a copy of it on Azure so we don't hit their servers every build
+- task: DownloadSecureFile@1
+  inputs:
+    secureFile: 'pyopencl-2018.2.5+cl12-cp36-cp36m-win_amd64.whl'
+  displayName: 'Pre-fetch PyOpenCL'
+  condition: eq( variables.platform, 'windows' )
+
+- bash: |
+    pip install $(grep -ivE "pyopencl" requirements.txt)
+    pip install unittest-xml-reporting
+
+    # Install PyOpenCL
+    if [[ $(platform) == "windows" ]]; then
+      pip install "$(DownloadSecureFile.secureFilePath)"
+    fi
+  displayName: 'Install requirements'
+
+- bash: |
+      mkdir neo
+      cd neo
+      wget https://github.com/intel/compute-runtime/releases/download/19.18.12932/intel-gmmlib_19.1.1_amd64.deb
+      wget https://github.com/intel/compute-runtime/releases/download/19.18.12932/intel-igc-core_1.0.3-1844_amd64.deb
+      wget https://github.com/intel/compute-runtime/releases/download/19.18.12932/intel-igc-opencl_1.0.3-1844_amd64.deb
+      wget https://github.com/intel/compute-runtime/releases/download/19.18.12932/intel-opencl_19.18.12932_amd64.deb
+      wget https://github.com/intel/compute-runtime/releases/download/19.18.12932/intel-ocloc_19.18.12932_amd64.deb
+      sudo dpkg -i *.deb
+      sudo apt install opencl-headers
+  displayName: 'Install OpenCL (Neo)'
+  condition: eq( variables.platform, '_skip_' )
+
+- bash: |
+    sudo apt install libnuma-dev
+    wget -qO - http://repo.radeon.com/rocm/apt/debian/rocm.gpg.key | sudo apt-key add -
+    echo 'deb [arch=amd64] http://repo.radeon.com/rocm/apt/debian/ xenial main' | sudo tee /etc/apt/sources.list.d/rocm.list
+    sudo apt update
+    sudo apt install rocm-dkms
+
+    /opt/rocm/bin/rocminfo
+    /opt/rocm/opencl/bin/x86_64/clinfo
+  displayName: 'Install OpenCL (ROCm)'
+  condition: eq( variables.platform, '_skip_' )
+
+
+
+# Run all tests
+
+- bash: |
+    mkdir tests_gpu
+    mv tests/testGPUProcessing.py tests_gpu/ 2>/dev/null
+
+    python -m xmlrunner discover tests -v -o /tmp/test_results_$(platform)
+  displayName: 'Run CPU tests'
+
+- bash: |
+    uname -a
+    clinfo
+    ls /etc/OpenCL/vendors
+    python -m xmlrunner discover tests_gpu -v -o /tmp/test_results_$(platform)
+  displayName: 'Run GPU tests'
+  condition: eq( variables.platform, '_skip_' )
+# Can't get an OpenCL runtime to work on Azure, even on CPU
+
+- task: PublishTestResults@2
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: '*.xml'
+    searchFolder: '/tmp/test_results_$(platform)/'
+    mergeTestResults: true
+    failTaskOnFailedTests: true
+  condition: and( succeededOrFailed(), eq( variables.platform, 'linux') )
+# Not sure why, but Windows can't find the tests anymore
+
+- bash: |
+    cp tests/data/10frames.avi tests/data/timing.avi
+    python timing.py
+  displayName: 'Run program timer'
+
+
+
+# Creates a .exe build of the whole program
+# Only runs on the Windows build
+
+- script: |
+    pip install pypiwin32 pyinstaller
+    python publish.py
+    mv ./dist/ui_tk.exe ./quickDDM.exe
+  displayName: 'Create Windows Build'
+  condition: eq( variables.platform, 'windows' )
+
+- task: CopyFiles@2
+  inputs:
+    sourceFolder: '.'
+    contents: '*.exe'
+    targetFolder: $(Build.ArtifactStagingDirectory)
+  displayName: 'Stage artifact'
+  condition: eq( variables.platform, 'windows' )
+
+# Publishes the zipped exe to the Azure TFS storage and links to the build
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathtoPublish: $(Build.ArtifactStagingDirectory)
+    artifactName: WindowsArtifacts
+  displayName: 'Publish artifact'
+  condition: eq( variables.platform, 'windows' )
