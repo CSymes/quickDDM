@@ -10,6 +10,7 @@ Creates a UI to interface with the program, using the tkinter framework
 HAS_BACKEND_GPU = False
 
 from curveFitterBasic import fitCorrelationsToFunction, generateFittedCurves
+from curveFitterBasic import FITTING_FUNCTIONS
 from basicMain import sequentialChunkerMain
 try: # Attempt to load GPU backend, and check if hardware/drivers are present
     from gpuMain import sequentialGPUChunker
@@ -57,10 +58,7 @@ PREVIEW_DIM = 256 # size of the preview image (pixels, square)
 DEFAULT_SCALING = 0.71 # default scale factor
 
 # Intermodule/function constants
-FITTING_RISING_EXP = 'rising exponential'
-FITTING_OTHER = 'TODO'
 FITTING_NONE = ''
-
 BACKEND_CPU = 'CPU'
 BACKEND_GPU = 'GPU'
 BACKEND_LOAD = 'FromDisk' # TODO frontend integration
@@ -485,6 +483,9 @@ class ProcessingFrame(Frame):
         progress.setPercentage(100)
         progress.setText('Done!')
 
+        for b in self.fitButtons: # Enable curve fitting choices
+            b['state'] = 'normal'
+
         return 'loading complete'
 
     """
@@ -502,6 +503,9 @@ class ProcessingFrame(Frame):
         for r in range(1, self.correlation.shape[1]):
             self.results.insert('end', f'q = {r}')
 
+        for b in self.fitButtons: # Enable curve fitting choices
+            b['state'] = 'normal'
+
         return 'CPU analysis complete'
 
     """
@@ -518,6 +522,9 @@ class ProcessingFrame(Frame):
 
         for r in range(1, self.correlation.shape[1]):
             self.results.insert('end', f'q = {r}')
+
+        for b in self.fitButtons: # Enable curve fitting choices
+            b['state'] = 'normal'
 
         return 'GPU analysis complete'
 
@@ -605,7 +612,7 @@ class ProcessingFrame(Frame):
             # TODO it'd probably be good to disable buttons until this isn't the case
             self.fitChoice.set(FITTING_NONE)
             self.fitting = FITTING_NONE
-            print('no available data to fit to')
+            print('No available data to fit to yet')
             return
 
         if self.fitting != oldModel: # don't recalc if you press the button again
@@ -618,12 +625,14 @@ class ProcessingFrame(Frame):
             if self.fitting == FITTING_NONE: # just remove D-curve and stop plotting fits
                 print('Plotting without curve fitting')
                 self.fitCurves = None
-                self.rerender()
+                self.updateGraphs()
                 return
 
             # show some text in mpl_d to show something's happening
-            elevatorText = self.mpl_d.text(0.5, 0.5, 'Generating curve fitting...', horizontalalignment='center',
-                                           verticalalignment='center', transform=self.mpl_d.transAxes)
+            elevatorText = self.mpl_d.text(0.5, 0.5, 'Generating curve fitting...',
+                                horizontalalignment='center',
+                                verticalalignment='center',
+                                transform=self.mpl_d.transAxes)
             self.mpl_d.loaders.append(elevatorText)
             self.rerender()
 
@@ -636,38 +645,52 @@ class ProcessingFrame(Frame):
     def makeFits(self, model):
         print(f'Fitting with assumption/{model}')
         qPoints = numpy.arange(1, self.correlation.shape[1]) # All valid values for q
+        D = None
 
         if model in self.fitCache: # This fitting's already been calculated
             self.fitCurves = self.fitCache[model][0] # pull curves back out
             D = self.fitCache[model][1] # as well as the diffusivity data
 
-            msg = 'restored fitting for {model}'
+            msg = f'restored fitting for {model}'
         else:
-            print('Calculating curve fitting over', qPoints.shape, 'points')
+            print('Calculating curve fitting over', qPoints.shape[0], 'curves')
             corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2)) # q-correction-factor for fitting
 
             # Dirty hack to prevent any sneaky rows of zeros breaking the curve fitting
             # Think this is only caused by overtly small sample sets
-            empties = numpy.where(~self.correlation.any(axis=0))[0]
+            # copy correlation so we can edit it without messing with the data
+            fitData = numpy.copy(self.correlation)
+            empties = numpy.where(~fitData.any(axis=0))[0]
             print(f'Forward-filling empty q-curves at {empties}')
             for row in empties:
-                self.correlation[:, row] = self.correlation[:, row+1]
-                # Just copy the next row. With 512 radial pixels, this should be be unnoticable
+                fitData[:, row] = fitData[:, row+1]
+                # Just copy the next row, we're not doing anything with it anyway
 
             # Find fitted equation paramaters
-            fit = fitCorrelationsToFunction(self.correlation, qPoints, model, qCorrection=corrQ, timeSpacings=self.deltas)
+            fit = fitCorrelationsToFunction(fitData, qPoints, model,
+                                            qCorrection=corrQ,
+                                            timeSpacings=self.deltas)
             # and generate plots with that data
-            self.fitCurves = generateFittedCurves(fit, qPoints, timeSpacings=self.deltas, frameRate=self.fps, numFrames=self.numFrames, qCorrection=corrQ)
+            self.fitCurves = generateFittedCurves(fit, qPoints,
+                                                  timeSpacings=self.deltas,
+                                                  frameRate=self.fps,
+                                                  numFrames=self.numFrames,
+                                                  qCorrection=corrQ)
+
             # First curve doesn't get a fit, but good to preserve dimensions anyway, so insert a dummy row
             self.fitCurves = numpy.concatenate((numpy.zeros((1, self.fitCurves.shape[1])), self.fitCurves), 0)
 
-            # extract diffusivity curve from fitting data too
-            D = [seg[2] for seg in fit[0] if seg is not None]
-
-            self.fitCache[model] = (self.fitCurves, D) # cache fitting data for reuse later, if necessary
             msg = f'{model} fitting complete'
 
-        self.mpl_d.plot(qPoints, D, color=cm.tab10(0), label='Diffusivity') # plot diffusivity curve
+            if model != 'linear': # linear doesn't do diffusivity
+                # do other models? I don't know.
+                # extract diffusivity curve from fitting data too
+                D = [seg[2] for seg in fit[0] if seg is not None]
+
+                self.fitCache[model] = (self.fitCurves, D) # cache fitting data for reuse later, if necessary
+
+        if D is not None: # plot diffusivity curve
+            self.mpl_d.plot(qPoints, D, color=cm.tab10(0), label='Diffusivity')
         self.mpl_d.legend(fontsize ='x-small')
 
         # remove the 'calculating' text from mpl_d
@@ -720,21 +743,30 @@ class ProcessingFrame(Frame):
             lFitting.grid(row=0, column=0)
 
             self.fitChoice = StringVar()
-            bFitExp = Radiobutton(fFitting, text='Rising Exponential', indicatoron=0, variable=self.fitChoice,
-                                    value=FITTING_RISING_EXP, command=self.triggerCurveFit)
-            bFitOther = Radiobutton(fFitting, text='Other...', indicatoron=0, variable=self.fitChoice,
-                                    value=FITTING_OTHER, command=self.triggerCurveFit)
-            bNone = Radiobutton(fFitting, text='No Fitting', indicatoron=0, variable=self.fitChoice,
-                                    value=FITTING_NONE, command=self.triggerCurveFit)
 
+            # Add all available fitting algorithms to the UI
+            # Choices defined in curveFitting.FITTING_FUNCTIONS
+            numFits = len(FITTING_FUNCTIONS)
+            self.fitButtons = []
+            for i, fitAlg in enumerate(FITTING_FUNCTIONS):
+                button = Radiobutton(fFitting, text=fitAlg.title(),
+                                     indicatoron=0,
+                                     variable=self.fitChoice,
+                                     value=fitAlg,
+                                     command=self.triggerCurveFit)
+                button.grid(row=0, column=i+1, padx=(0, WINDOW_PADDING))
+                button['state'] = 'disabled'
+                self.fitButtons.append(button)
+
+            bNone = Radiobutton(fFitting, text='No Fitting',
+                                indicatoron=0,
+                                variable=self.fitChoice,
+                                value=FITTING_NONE,
+                                command=self.triggerCurveFit)
             bSave = Button(fFitting, text='Save Data to Disk...', command=self.saveAllData)
 
-            bFitExp.grid(row=0, column=1)
-            bFitOther.grid(row=0, column=2, padx=(WINDOW_PADDING, WINDOW_PADDING))
-            bNone.grid(row=0, column=3, padx=(WINDOW_PADDING, WINDOW_PADDING*4))
-            bSave.grid(row=0, column=4)
-
-            bFitOther['state'] = 'disabled' # TODO directional fitting
+            bNone.grid(row=0, column=numFits+1, padx=(WINDOW_PADDING, WINDOW_PADDING*4))
+            bSave.grid(row=0, column=numFits+2)
 
         # matplotlib figure on the right
         pFigure = Figure(figsize=(10, 6), dpi=100)
@@ -759,6 +791,8 @@ class ProcessingFrame(Frame):
         self.columnconfigure(0, weight=1, minsize=175) # allow for longer progress strings
         self.columnconfigure(1, minsize=WINDOW_PADDING) # Gap between left and right sections
         self.columnconfigure(2, weight=3)
+
+
 
 """Simple wrapper to allow passing a threaded exit flag around by reference"""
 class ExitWrapper():
@@ -791,6 +825,7 @@ class ProgressWrapper():
         self.setPercentage(0) # reset to 0
         self.bar['mode'] = 'indeterminate' # cycling rather than filling
         self.bar.start() # begin auto-incrementing
+
 
 
 """
@@ -858,7 +893,8 @@ if __name__ == '__main__':
         def checkThreads(): # periodic poll to check for threaded errors
             # get any completed threads (without blocking)
             # TODO graphically show errors?
-            [done, ndone] = futures.wait(threadResults, timeout=0, return_when=futures.FIRST_COMPLETED)
+            [done, ndone] = futures.wait(threadResults, timeout=0,
+                                return_when=futures.FIRST_COMPLETED)
             for future in done:
                 print(f'Thread return: {future.result()}')
                 threadResults.remove(future)
