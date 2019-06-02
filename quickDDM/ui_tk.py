@@ -75,7 +75,7 @@ class LoadFrame(Frame):
     def __init__(self, parent):
         super().__init__(parent, padding=WINDOW_PADDING)
         # prevent AttributeError when checking if it needs clearing before anything's been cleared
-        self.video_file = None
+        self.videoFile = None
 
         self.populateL() # video load/data elements
         self.columnconfigure(3, minsize=WINDOW_PADDING) # Gap between left and right sections
@@ -141,10 +141,9 @@ class LoadFrame(Frame):
             self.spacingHelp.set(f' (max {self.maxDelta})')
             self.scaling.insert(0, DEFAULT_SCALING)
 
-            self.video_file = videoFile
+            self.videoFile = videoFile
             self.handleScroll('moveto', '0.0') # Activate scrollbar, show preview
 
-            # loader.load_button.invoke() # TODO remove
             # Leave videoFile open for fetching of previews
 
         # File didn't open - not a video, corrupt, read error, or whatever else it could be
@@ -176,9 +175,9 @@ class LoadFrame(Frame):
 
         self.scrub.set('0.0', '1.0') # Reset/disable scrollbar
         self.img_preview.delete('all') # Delete the image preview
-        if self.video_file: # if necessary
-            self.video_file.release() # release the previous video stream
-        self.video_file = None # and allow deallocation
+        if self.videoFile: # if necessary
+            self.videoFile.release() # release the previous video stream
+        self.videoFile = None # and allow deallocation
 
     """
     Click handler for analysis button
@@ -217,7 +216,7 @@ class LoadFrame(Frame):
             messagebox.showerror('Input Error', '\n'.join(inputErrs))
             return # Break until they're corrected
 
-        self.video_file.release()
+        self.videoFile.release()
         self.destroy()
         # The old has passed away...
 
@@ -227,8 +226,8 @@ class LoadFrame(Frame):
 
     """Rips the frame at `index` out of the chosen video and shows in the preview pane"""
     def setPreview(self, index):
-        self.video_file.set(cv2.CAP_PROP_POS_FRAMES, index)
-        status, frame = self.video_file.read()
+        self.videoFile.set(cv2.CAP_PROP_POS_FRAMES, index)
+        status, frame = self.videoFile.read()
 
         if status:
             thumSize = self.img_preview.winfo_width()
@@ -332,8 +331,10 @@ class LoadFrame(Frame):
 
 
             # Input validation
-            chkSpace = self.register(lambda P: ((P.isdigit() and int(P) < int(self.numFrames.get())) or P == ""))
-            chkScale = self.register(lambda P: (P.replace('.','', 1).isdigit() or P == ""))
+            chkSpace = self.register(lambda P:
+                ((P.isdigit() and int(P) < int(self.numFrames.get())) or P == ""))
+            chkScale = self.register(lambda P:
+                (P.replace('.','', 1).isdigit() or P == ""))
 
             mlSpacing = Label(lMetaSubframe, text='Max. Spacing: ')
             mlSpacing.grid(row=5, column=0, sticky=E)
@@ -344,12 +345,14 @@ class LoadFrame(Frame):
 
             fSpacing = Frame(lMetaSubframe)
             fSpacing.grid(row=5, column=1, sticky=W)
-            self.spacing = Entry(fSpacing, width=5, validate='all', validatecommand=(chkSpace, '%P'))
+            self.spacing = Entry(fSpacing, width=5, validate='all',
+                validatecommand=(chkSpace, '%P'))
             self.spacing.grid(row=0, column=0, sticky=W)
             self.spacingHelp = StringVar()
             fsHelp = Label(fSpacing, textvariable=self.spacingHelp)
             fsHelp.grid(row=0, column=1, sticky=W)
-            self.scaling = Entry(lMetaSubframe, width=5, validate='all', validatecommand=(chkScale, '%P'))
+            self.scaling = Entry(lMetaSubframe, width=5, validate='all',
+                validatecommand=(chkScale, '%P'))
             self.scaling.grid(row=6, column=1, sticky=W)
 
             self.spacing['state'] = 'disabled'
@@ -358,9 +361,11 @@ class LoadFrame(Frame):
 
             fTimeSpacing = Frame(lMetaSubframe)
             fTimeSpacing.grid(row=7, column=1)
-            timeLinear = Radiobutton(fTimeSpacing, text='Linear', value=False, variable=self.deltaExponential)
+            timeLinear = Radiobutton(fTimeSpacing, text='Linear', value=False,
+                variable=self.deltaExponential)
             timeLinear.grid(row=0, column=0, sticky=[E, W])
-            timeExp = Radiobutton(fTimeSpacing, text='Exponential', value=True, variable=self.deltaExponential)
+            timeExp = Radiobutton(fTimeSpacing, text='Exponential', value=True,
+                variable=self.deltaExponential)
             timeExp.grid(row=0, column=1, sticky=[E, W])
 
 
@@ -374,13 +379,16 @@ class LoadFrame(Frame):
 
             fProc = Frame(lMetaSubframe)
             fProc.grid(row=9, column=1, sticky=[E, W])
-            procCPU = Radiobutton(fProc, text='CPU', value=BACKEND_CPU, variable=self.backendChoice)
+            procCPU = Radiobutton(fProc, text='CPU', value=BACKEND_CPU,
+                variable=self.backendChoice)
             procCPU.grid(row=0, column=0)
-            procGPU = Radiobutton(fProc, text='GPU', value=BACKEND_GPU, variable=self.backendChoice)
+            procGPU = Radiobutton(fProc, text='GPU', value=BACKEND_GPU,
+                variable=self.backendChoice)
             procGPU.grid(row=0, column=1)
 
-            self.backendChoice.set(BACKEND_GPU) # Preselect CPU
-            if HAS_BACKEND_GPU == False:
+            if HAS_BACKEND_GPU == True: # If available, preselect GPU
+                self.backendChoice.set(BACKEND_GPU)
+            else: # Else select CPU
                 self.backendChoice.set(BACKEND_CPU)
                 procGPU['state'] = 'disabled'
 
@@ -436,6 +444,9 @@ class ProcessingFrame(Frame):
         self.fps = fps
         self.numFrames = numFrames
 
+        self.filename = fname
+        self.backend = backend
+
         self.fitting = ''
         self.fitCurves = None
         self.fitCache = {}
@@ -474,6 +485,9 @@ class ProcessingFrame(Frame):
         self.deltas = cold[:, 0] # extract time deltas
         self.correlation = cold[:, 1:] # cut deltas off data
 
+        for b in self.fitButtons: # Enable curve fitting choices
+            b['state'] = 'normal'
+
         for r in range(1, self.correlation.shape[1]):
             self.results.insert('end', f'q = {r}')
 
@@ -482,9 +496,6 @@ class ProcessingFrame(Frame):
 
         progress.setPercentage(100)
         progress.setText('Done!')
-
-        for b in self.fitButtons: # Enable curve fitting choices
-            b['state'] = 'normal'
 
         return 'loading complete'
 
@@ -496,15 +507,16 @@ class ProcessingFrame(Frame):
         progress.setText('Processing')
         progress.cycle()
 
-        self.correlation = sequentialChunkerMain(fname, deltas, progress=progress, abortFlag=threadKiller)
+        self.correlation = sequentialChunkerMain(fname, deltas,
+            progress=progress, abortFlag=threadKiller)
 
         if self.correlation is None: return 'thread aborted'
 
-        for r in range(1, self.correlation.shape[1]):
-            self.results.insert('end', f'q = {r}')
-
         for b in self.fitButtons: # Enable curve fitting choices
             b['state'] = 'normal'
+
+        for r in range(1, self.correlation.shape[1]):
+            self.results.insert('end', f'q = {r}')
 
         return 'CPU analysis complete'
 
@@ -516,15 +528,16 @@ class ProcessingFrame(Frame):
         progress.setText('Processing')
         progress.cycle()
 
-        self.correlation = sequentialGPUChunker(fname, deltas, progress=progress, abortFlag=threadKiller)
+        self.correlation = sequentialGPUChunker(fname, deltas,
+            progress=progress, abortFlag=threadKiller)
 
         if self.correlation is None: return 'thread aborted'
 
-        for r in range(1, self.correlation.shape[1]):
-            self.results.insert('end', f'q = {r}')
-
         for b in self.fitButtons: # Enable curve fitting choices
             b['state'] = 'normal'
+
+        for r in range(1, self.correlation.shape[1]):
+            self.results.insert('end', f'q = {r}')
 
         return 'GPU analysis complete'
 
@@ -545,19 +558,53 @@ class ProcessingFrame(Frame):
 
         # Split IO onto its own thread
         def save(self, fn):
+            n = 0
+
             numpy.savetxt(fn, self.correlation, delimiter=' ')
-            r = f'saved {len(self.correlation)} rows to {fn}'
+            n += 1
 
             if self.fitCurves is not None:
-                # Append '_fitting' to filename and save as csv
-                fn_fit = re.sub(r'\.csv$', '', fn) + '_fitting.csv'
-                numpy.savetxt(fn_fit, self.fitCurves, delimiter=' ')
+                # Append suffixes to filename and save as csv
+
+                # Actual fitted curves
+                fnFit = re.sub(r'\.csv$', '', fn) + '_fitting_curves.csv'
+                numpy.savetxt(fnFit, self.fitCurves[1:, :], delimiter=' ')
+
+                # And the fitting parameters
+
+                # q (pixel), q (real), ?, param a, b, c, fit goodness, # iters
+                COLUMNS = 8
+                ROWS = len(self.fitParams[0]) - 1
+                # Drop first row (doesn't get fitted)
+
+                fitParamsOut = numpy.zeros((ROWS, COLUMNS), dtype=numpy.float64)
+                fitParamsOut[:, 0] = range(1, len(self.fitParams[0])) # q pixels
+                fitParamsOut[:, 1] = self.fitParams[1] # actual q indices
+                fitParamsOut[:, 3:6] = self.fitParams[0][1:] # fitting params
+
+                import code; code.interact(local=dict(globals(), **locals()))
+
+                fnParams = re.sub(r'\.csv$', '', fn) + '_fitting_params.csv'
+                numpy.savetxt(fnParams, fitParamsOut, delimiter=' ')
+
+                n += 1
 
             if saveConfig:
                 # Append '_config' to filename and save metadata
-                fn_config = re.sub(r'\.csv$', '', fn) + '_config.csv'
+                fn_config = re.sub(r'\.csv$', '', fn) + '_config.txt'
                 with open(fn_config, 'w') as f:
-                    f.write(f'TODO') # TODO
+                    f.write(f'Processing file "{self.filename}"\n')
+                    f.write(f'Analysed with Backend: {self.backend}\n')
+                    f.write(f'\n')
+                    f.write(f'Logarithmic spacing: {self.exponentialSpacing}\n')
+                    f.write(f'Physical scaling factor: {self.scalingFactor}\n')
+                    f.write(f'Video FPS: {self.fps}\n')
+                    f.write(f'Number of Frames: {self.numFrames}\n')
+
+                    # TODO save delta range once it's transient
+                    n += 1
+
+            return f'saved {len(self.correlation)} functions to {n} files'
 
 
         startThread(save, self, filename)
@@ -643,7 +690,7 @@ class ProcessingFrame(Frame):
     Options for `model` are as in curveFitterBasic.py
     """
     def makeFits(self, model):
-        print(f'Fitting with assumption/{model}')
+        print(f'Fitting with curve fitting model "{model}"')
         qPoints = numpy.arange(1, self.correlation.shape[1]) # All valid values for q
         D = None
 
@@ -651,10 +698,11 @@ class ProcessingFrame(Frame):
             self.fitCurves = self.fitCache[model][0] # pull curves back out
             D = self.fitCache[model][1] # as well as the diffusivity data
 
-            msg = f'restored fitting for {model}'
+            msg = f'restored fitting for fitting model "{model}"'
         else:
             print('Calculating curve fitting over', qPoints.shape[0], 'curves')
-            corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2)) # q-correction-factor for fitting
+            # q-correction-factor for fitting
+            corrQ = (2*numpy.pi*self.scalingFactor/((self.correlation.shape[1])*2))
 
             # Dirty hack to prevent any sneaky rows of zeros breaking the curve fitting
             # Think this is only caused by overtly small sample sets
@@ -667,15 +715,15 @@ class ProcessingFrame(Frame):
                 # Just copy the next row, we're not doing anything with it anyway
 
             # Find fitted equation paramaters
-            fit = fitCorrelationsToFunction(fitData, qPoints, model,
-                                            qCorrection=corrQ,
-                                            timeSpacings=self.deltas)
+            self.fitParams = fitCorrelationsToFunction(fitData, qPoints, model,
+                                                qCorrection=corrQ,
+                                                timeSpacings=self.deltas)
             # and generate plots with that data
-            self.fitCurves = generateFittedCurves(fit, qPoints,
-                                                  timeSpacings=self.deltas,
-                                                  frameRate=self.fps,
-                                                  numFrames=self.numFrames,
-                                                  qCorrection=corrQ)
+            self.fitCurves = generateFittedCurves(self.fitParams, qPoints,
+                                                timeSpacings=self.deltas,
+                                                frameRate=self.fps,
+                                                numFrames=self.numFrames,
+                                                qCorrection=corrQ)
 
             # First curve doesn't get a fit, but good to preserve dimensions anyway, so insert a dummy row
             self.fitCurves = numpy.concatenate((numpy.zeros((1, self.fitCurves.shape[1])), self.fitCurves), 0)
@@ -685,7 +733,7 @@ class ProcessingFrame(Frame):
             if model != 'linear': # linear doesn't do diffusivity
                 # do other models? I don't know.
                 # extract diffusivity curve from fitting data too
-                D = [seg[2] for seg in fit[0] if seg is not None]
+                D = [seg[2] for seg in self.fitParams[0] if seg is not None]
 
                 self.fitCache[model] = (self.fitCurves, D) # cache fitting data for reuse later, if necessary
 
@@ -839,7 +887,8 @@ def startThread(threadFunc, *args, callback=None):
     future = threadPool.submit(threadFunc, *args)
 
     # Allow functions to be run on the main thread after execution of a thread
-    # This is necessary since Tkinter isn't thread-safe and will crash if you reference it from another thread
+    # This is necessary since Tkinter isn't thread-safe and *will*
+    # crash if you call to it from another thread
     future.callback = callback
     threadResults.append(future)
 
@@ -907,14 +956,17 @@ if __name__ == '__main__':
         window.after(100, checkThreads)
 
         def onQuit():
-            threadKiller.set()
-            if loader.winfo_exists(): # Only query if analysis has begun # TODO don't question it if results saved to disk?
-                pass
-                # if askokcancel('Abort?', 'Are you sure you want to abort analysis?', default='cancel'):
-            window.destroy()
+            if (not loader.winfo_exists() and # Only query if analysis has begun
+                not askokcancel('Abort?',
+                    'Are you sure you want to abort analysis?',
+                    default='cancel')):
+                return False
+                # TODO don't question it if results saved to disk?
+            threadKiller.set() # tell child threads to just kill themselves already
+            window.destroy() # and show the window the door
 
         window.protocol('WM_DELETE_WINDOW', onQuit)
         window.mainloop() # hand control off to tkinter
 
 # TODO Think about splitting this into multiple files
-#      Maybe have a UI subpackage instead of a UI module
+#      Maybe have a UI subpackage instead of a UI module, aye
