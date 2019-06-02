@@ -11,9 +11,11 @@ import os, sys, shutil
 import numpy
 import unittest
 
+"""
+Suite of unit tests to run against quickddm.readVideo
+"""
 class ReadVideoTestCases(unittest.TestCase):
     def testValidVideoOpens(self):
-        # TODO maybe split readVideo into readVideo(IntoFrames) and read(Single)Frame?
         readVideo('tests/data/short.avi') # single black frame
 
     def testReadFramesAreCorrect(self):
@@ -29,7 +31,7 @@ class ReadVideoTestCases(unittest.TestCase):
         # Just take a lot of extra code, probably not worth it
         # TODO think about implementing it anyway
         with self.assertRaises(OSError):
-            print('\nExpecting ioctl error... ', end='')
+            print('\nExpecting IO error... ', end='')
             readVideo('tests/data/corrupt.avi')
             # corrupt.avi is literally just 1MB of /dev/random
 

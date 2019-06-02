@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#gpuMain.py
+#gpuCore.py
 
 """
 Main function, running on a GPU using Reikna/PyOpenCL
@@ -190,6 +190,9 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
                 print(normalFrame.shape)
 
                 totalDifferences[relativeDifference, :, :] += normalFrame.get()
+
+                # TODO - Need to make this ^^^ run on the GPU
+                # allocate list of empty buffers, add into?
 
                 numDifferences[relativeDifference] += 1
                 relativeDifference += 1

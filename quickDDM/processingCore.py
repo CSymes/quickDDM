@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#basicMain.py
+#processingCore.py
 """
 Created on Tue Mar 26 14:26:28 2019
 This is the most basic way of running the process. It will call each part
@@ -125,10 +125,12 @@ def realAccumulateMain(videoPath, spacings, outputPath = None):
         np.savetxt(outputPath, outputMatrix)
     return outputMatrix
 
-#defaults to 1GB
-#does not currently use spacings, simplest possible version
-#based on figure 2 in the technical note
-def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 3, progress=None, abortFlag=None):
+"""
+Defaults to 1GB
+Does not currently use spacings, simplest possible version
+Based on the process outlined in figure 2 in the technical note
+"""
+def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1, progress=None, abortFlag=None):
     if progress is not None:
         progress.setText('Reading Video from Disk')
         progress.cycle()
