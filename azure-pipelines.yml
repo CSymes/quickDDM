@@ -106,6 +106,7 @@ steps:
 
 
 # Creates a .exe build of the whole program
+# Only runs on the Windows build
 
 - script: |
     pip install pypiwin32 pyinstaller

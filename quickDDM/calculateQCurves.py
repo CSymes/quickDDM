@@ -21,7 +21,7 @@ def calculateQCurves(fourierDifferences):
     averages = np.mean(fourierDifferences, axis = 0)
     ySize = fourierDifferences.shape[1]
     xSize = fourierDifferences.shape[2]
-    #For now, it is just mimicing the provided MATLAB, which isn't ideal, but sue me.
+
     yRange = np.arange(-ySize/2.0,ySize/2.0, dtype = np.int32)
     xRange = np.arange(-xSize/2.0,xSize/2.0, dtype = np.int32)
     xGrid, yGrid = np.meshgrid(xRange,yRange)
@@ -57,14 +57,14 @@ def calculateRealQCurves(fourierDifferences):
     #last and second last dimensions
     ySize = fourierDifferences.shape[-2]
     xSize = fourierDifferences.shape[-1]
-    #For now, it is just mimicing the provided MATLAB, which isn't ideal, but sue me.
+
     yRange = np.arange(-ySize/2.0,ySize/2.0, dtype = np.int32)
     xRange = np.arange(0,xSize, dtype = np.int32)
     xGrid, yGrid = np.meshgrid(xRange,yRange)
     #This hot mess gets the radial values as integers, with appropriate rounding
     radiusGrid = np.around(np.sqrt(np.square(yGrid) + np.square(xGrid)),0).astype(np.int16)
     yRange, xRange, xGrid, yGrid = 0, 0, 0, 0
-    
+
     #Removing the y centre and x edge values, which are often incorrectly high
     radiusGrid[:,0] = -1
     radiusGrid[ySize//2,:] = -1
@@ -78,7 +78,7 @@ def calculateRealQCurves(fourierDifferences):
         qCurve[r] = (np.mean(averages[pickGrid]))
         r += 1
     return qCurve
-    
+
 def calculateWithCalls(fourierDifferences):
     # Normalising here no longer required - performed in the Fourier module
     if len(fourierDifferences.shape) == 3:
@@ -102,7 +102,7 @@ def generateGrid(dims):
     #Removing the centre values
     radiusGrid[:,dims[0]//2] = -1
     radiusGrid[dims[1]//2,:] = -1
-    
+
     return radiusGrid
 
 def takeCurves(averages, radiusGrid):

@@ -7,8 +7,8 @@ Series of tests for the 2D Fourier calculation functionality
 """
 
 from quickDDM.readVideo import readVideo
-from quickDDM.frameDifferencer import frameDifferencer
-from quickDDM.twoDFourier import twoDFourier as fft, normaliseFourier as n_fft
+from quickDDM.twoDFourier import twoDFourierUnnormalized as fft2
+from quickDDM.twoDFourier import castToReal as n_fft2
 
 import numpy, numpy.testing
 import unittest
@@ -18,11 +18,14 @@ class FourierTransformTestCases(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # a (10-frame) 128x128 crop of the large data file
-        self.frames = readVideo('tests/data/small.avi')
-        self.diff = frameDifferencer(self.frames, 1)
+        self.frames = readVideo('tests/data/small.avi').astype(numpy.int16)
+        self.firstDiff = self.frames[1] - self.frames[0]
+
 
     def testBasicFourier(self):
-        q = fft([self.frames[0]])[0]
+        frame = self.frames[0:1]
+        ft = fft2(frame)[0]
+        q = n_fft2(ft)
 
         with open('tests/data/fft_matlab_f1.csv', 'rb') as mf:
             m = numpy.loadtxt(mf, delimiter=',')
@@ -32,7 +35,9 @@ class FourierTransformTestCases(unittest.TestCase):
             numpy.testing.assert_allclose(q, m, rtol=1e-3)
 
     def testSubtractThenFourier(self):
-        q = fft([self.diff[0]])[0]
+        frame = numpy.asarray([self.firstDiff])
+        ft = fft2(frame)[0]
+        q = n_fft2(ft)
 
         with open('tests/data/fft_matlab_f(2-1).csv', 'rb') as mf:
             m = numpy.loadtxt(mf, delimiter=',')
@@ -42,8 +47,9 @@ class FourierTransformTestCases(unittest.TestCase):
             numpy.testing.assert_allclose(q, m, rtol=1e-3)
 
     def testFourierThenSubtract(self):
-        f = fft(self.frames[0:2], normalise=False)
-        q = n_fft(numpy.asarray([f[1] - f[0]]))[0]
+        frames = self.frames[0:2]
+        ft = fft2(frames)
+        q = n_fft2(ft[1] - ft[0])
 
         with open('tests/data/fft_matlab_f2-f1.csv', 'rb') as mf:
             m = numpy.loadtxt(mf, delimiter=',')
@@ -51,10 +57,11 @@ class FourierTransformTestCases(unittest.TestCase):
             numpy.testing.assert_allclose(q, m, rtol=1e-3)
 
     def testFFTLinearity(self):
-        a = fft([self.diff[0]])[0]
+        aft = fft2(numpy.asarray([self.firstDiff]))[0]
+        a = n_fft2(aft)
 
-        f = fft(self.frames[0:2], normalise=False)
-        b = n_fft(numpy.asarray([f[1] - f[0]]))[0]
+        bft = fft2(self.frames[0:2])
+        b = n_fft2(bft[1] - bft[0])
 
         # Order should be very nearly immaterial
         numpy.testing.assert_allclose(a, b, rtol=1e-12)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-#curveFitterBasic.py
+#curveFitting.py
 """
 Created on Wed Apr 10 14:49:03 2019
 This file handles all of the curve fitting. Any new models that are wanted must

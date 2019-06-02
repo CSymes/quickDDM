@@ -12,10 +12,7 @@ from reikna.fft import FFT, FFTShift
 from reikna.transformations import norm_const, div_const
 
 from quickDDM.readVideo import readVideo
-from quickDDM.frameDifferencer import frameDifferencer
-from quickDDM.twoDFourier import twoDFourier
-from quickDDM.calculateQCurves import calculateQCurves
-from quickDDM.calculateCorrelation import calculateCorrelation
+from quickDDM.twoDFourier import twoDFourierUnnormalized, castToReal
 
 import numpy, numpy.testing
 import unittest
@@ -25,8 +22,8 @@ class GPUTestCases(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Cache test data
-        self.frames = readVideo('tests/data/small.avi')
-        self.diffs = frameDifferencer(self.frames, 1)
+        self.frames = readVideo('tests/data/small.avi').astype(numpy.int16)
+        self.firstDiff = self.frames[1] - self.frames[0]
 
         api = reikna.cluda.ocl_api()
         self.thread = api.Thread.create()
@@ -48,29 +45,30 @@ class GPUTestCases(unittest.TestCase):
         self.normalise = fftshift.compile(self.thread) # Compile FFTShift with normalisation Transformations
 
     def testSimpleFourierMatchesCPU(self):
-        devFr = self.thread.to_device(self.diffs[0].astype(numpy.complex))
+        devFr = self.thread.to_device(self.firstDiff.astype(numpy.complex))
         self.fft(devFr, devFr)
 
         local = devFr.get()
-        cpu = numpy.fft.fft2(self.diffs[0])
-        # cpu = twoDFourier(self.diffs, normalise=False)[0]
+        cpu = numpy.fft.fft2(self.firstDiff)
 
         numpy.testing.assert_allclose(local, cpu)
 
     def testFourierWithNormalisationMatchesCPU(self):
         res = self.thread.array(self.frames[0].shape, dtype=numpy.float64)
-        devFr = self.thread.to_device(self.diffs[0].astype(numpy.complex))
+        devFr = self.thread.to_device(self.firstDiff.astype(numpy.complex))
         self.fft(devFr, devFr)
         self.normalise(res, devFr)
 
         local = res.get()
-        cpu = twoDFourier(self.diffs)[0]
 
-        numpy.testing.assert_allclose(local, cpu, rtol=1e-3)
+        ftframe = numpy.asarray([self.firstDiff])
+        cpu = castToReal(twoDFourierUnnormalized(ftframe)[0])
+
+        numpy.testing.assert_allclose(local, cpu)
 
     def testFourierWithNormalisationMatchesMatlab(self):
         res = self.thread.array(self.frames[0].shape, dtype=numpy.float64)
-        devFr = self.thread.to_device(self.diffs[0].astype(numpy.complex))
+        devFr = self.thread.to_device(self.firstDiff.astype(numpy.complex))
         self.fft(devFr, devFr)
         self.normalise(res, devFr)
 
@@ -79,5 +77,4 @@ class GPUTestCases(unittest.TestCase):
         with open('tests/data/fft_matlab_f2-f1.csv', 'rb') as mf:
             m = numpy.loadtxt(mf, delimiter=',')
 
-            # Matlab matches much closer than Numpy by the looks of it
-            numpy.testing.assert_allclose(local, m, rtol=1e-8)
+            numpy.testing.assert_allclose(local, m)

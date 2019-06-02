@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#basicMain.py
+#processingCore.py
 """
 Created on Tue Mar 26 14:26:28 2019
 This is the most basic way of running the process. It will call each part
@@ -11,124 +11,17 @@ of the process in turn, chaining them together.
 import sys
 import numpy as np
 import readVideo as rV
-import frameDifferencer as fD
 import twoDFourier as tDF
 import calculateQCurves as cQC
 import calculateCorrelation as cC
 from collections import deque
 
-#starting with the simplest case, consecutive frame differences
-def differenceFirstMain(videoPath, spacings, outputPath = None):
-    #spacings = np.array((13,14,15))
-    correlations = []
-    videoInput = rV.readVideo(videoPath)
-    for spacing in spacings:
-        frameDifferences = fD.frameDifferencer(videoInput, spacing)
-        fourierSections = tDF.twoDFourier(frameDifferences)
-        qCurve = cQC.calculateQCurves(fourierSections)
-        correlations.append(qCurve)
-    correlations = cC.calculateCorrelation(correlations)
-
-    frameRate = rV.readFramerate(videoPath)
-    timeSpacings = np.array(spacings) / frameRate
-    #This is the way to stack arrays in numpy
-    outputMatrix = np.c_[timeSpacings, correlations]
-    if outputPath is not None:
-        np.savetxt(outputPath, outputMatrix)
-
-    return outputMatrix
-
-def transformFirstMain(videoPath, spacings, outputPath = None):
-    correlations = []
-    videoInput = rV.readVideo(videoPath)
-    fourierSections = np.fft.fftshift(np.fft.fft2(videoInput), axes = (1,2))
-    for spacing in spacings:
-        frameDifferences = fD.frameDifferencer(fourierSections, spacing)
-        frameDifferences = tDF.normaliseFourier(frameDifferences)
-        qCurve = cQC.calculateQCurves(frameDifferences)
-        correlations.append(qCurve)
-    correlations = cC.calculateCorrelation(correlations)
-    frameRate = rV.readFramerate(videoPath)
-    timeSpacings = np.array(spacings) / frameRate
-    #This is the way to stack arrays in numpy
-    outputMatrix = np.c_[timeSpacings, correlations]
-    if outputPath is not None:
-        np.savetxt(outputPath, outputMatrix)
-    return outputMatrix
-
-def cumulativeDifferenceMain(videoPath, spacings, outputPath = None):
-    correlations = []
-    videoInput = rV.readVideo(videoPath)
-    for spacing in spacings:
-        frameDifferences = fD.frameDifferencer(videoInput, spacing)
-        fourierMeans = tDF.cumulativeTransformAndAverage(frameDifferences)
-        qCurve = cQC.calculateWithCalls(fourierMeans)
-        correlations.append(qCurve)
-    correlations = cC.calculateCorrelation(correlations)
-    frameRate = rV.readFramerate(videoPath)
-    timeSpacings = np.array(spacings) / frameRate
-    #This is the way to stack arrays in numpy
-    outputMatrix = np.c_[timeSpacings, correlations]
-    if outputPath is not None:
-        np.savetxt(outputPath, outputMatrix)
-    return outputMatrix
-
-def realDifferenceMain(videoPath, spacings, outputPath = None):
-    correlations = []
-    videoInput = rV.readVideo(videoPath)
-    for spacing in spacings:
-        frameDifferences = fD.frameDifferencer(videoInput, spacing)
-        fourierSections = tDF.realTwoDFourier(frameDifferences)
-        qCurve = cQC.calculateRealQCurves(fourierSections)
-        correlations.append(qCurve)
-    correlations = cC.calculateCorrelation(correlations)
-    frameRate = rV.readFramerate(videoPath)
-    timeSpacings = np.array(spacings) / frameRate
-    #This is the way to stack arrays in numpy
-    outputMatrix = np.c_[timeSpacings, correlations]
-    if outputPath is not None:
-        np.savetxt(outputPath, outputMatrix)
-    return outputMatrix
-
-def realTransformMain(videoPath, spacings, outputPath = None):
-    correlations = []
-    videoInput = rV.readVideo(videoPath)
-    scaling = (videoInput.shape[1] * videoInput.shape[2])
-    fourierSections = np.fft.fftshift(np.fft.rfft2(videoInput), axes = (1,))
-    for spacing in spacings:
-        frameDifferences = fD.frameDifferencer(fourierSections, spacing)
-        #At the moment this will normalise incorrectly, but that is ok for timing tests
-        frameDifferences = np.square(np.absolute(frameDifferences))/scaling
-        qCurve = cQC.calculateRealQCurves(frameDifferences)
-        correlations.append(qCurve)
-    frameRate = rV.readFramerate(videoPath)
-    timeSpacings = np.array(spacings) / frameRate
-    #This is the way to stack arrays in numpy
-    outputMatrix = np.c_[timeSpacings, correlations]
-    if outputPath is not None:
-        np.savetxt(outputPath, outputMatrix)
-    return outputMatrix
-
-def realAccumulateMain(videoPath, spacings, outputPath = None):
-    correlations = []
-    videoInput = rV.readVideo(videoPath)
-    for spacing in spacings:
-        frameDifferences = fD.frameDifferencer(videoInput, spacing)
-        fourierMeans = tDF.cumulativeTransformAndAverageReal(frameDifferences)
-        qCurve = cQC.calculateRealQCurves(fourierMeans)
-        correlations.append(qCurve)
-    frameRate = rV.readFramerate(videoPath)
-    timeSpacings = np.array(spacings) / frameRate
-    #This is the way to stack arrays in numpy
-    outputMatrix = np.c_[timeSpacings, correlations]
-    if outputPath is not None:
-        np.savetxt(outputPath, outputMatrix)
-    return outputMatrix
-
-#defaults to 1GB
-#does not currently use spacings, simplest possible version
-#based on figure 2 in the technical note
-def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 3, progress=None, abortFlag=None):
+"""
+Defaults to 1GB
+Does not currently use spacings, simplest possible version
+Based on the process outlined in figure 2 in the technical note
+"""
+def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1, progress=None, abortFlag=None):
     if progress is not None:
         progress.setText('Reading Video from Disk')
         progress.cycle()
@@ -245,4 +138,4 @@ def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 3, pro
     return outputMatrix
 
 if __name__ == '__main__':
-    sequentialChunkerMain('C:\\Users\\Lionel\\Documents\\GitHub\\quickDDM\\tests\\data\\10frames.avi', None)
+    sequentialChunkerMain('..\\tests\\data\\10frames.avi', None)

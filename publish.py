@@ -8,6 +8,8 @@ if __name__ == '__main__':
         print('This script only builds under Windows - aborting')
         exit()
 
+    # Get paths to the install locations for OpenCV and Reikna
+    # PyInstaller misses a few files by default, make sure they get added
     cv_p = cv2.__path__[0]
     r_p = reikna.__path__[0]
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#gpuMain.py
+#gpuCore.py
 
 """
 Main function, running on a GPU using Reikna/PyOpenCL
@@ -19,8 +19,6 @@ from reikna.transformations import norm_const, div_const
 from collections import deque
 
 from readVideo import readVideo, readFramerate
-from frameDifferencer import frameDifferencer
-from twoDFourier import twoDFourier, castToReal
 from calculateQCurves import calculateWithCalls
 from calculateCorrelation import calculateCorrelation
 
@@ -127,10 +125,6 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
     # The number of different slice intervals that must be taken
     numSpacingSets = int(numpy.ceil((numFrames -1) / framesPerSlice))
 
-    print('numSpacingSets:', numSpacingSets)
-    print('framesPerSlice:', framesPerSlice)
-    print('complexFrameByteSize:', complexFrameByteSize)
-
     # Used to show progress in the UI
     framesProcessed = 0
     target = numFrames * (numFrames - 1) / 2 # algorithm complexity
@@ -142,7 +136,8 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
 
     # For each diagonal section
     for sliceSpacing in range(0, numSpacingSets):
-        if progress is not None: progress.setText(f'Working on Slice {sliceSpacing+1}/{numSpacingSets}')
+        if progress is not None:
+            progress.setText(f'Working on Slice {sliceSpacing+1}/{numSpacingSets}')
 
         #A double ended queue, more efficient than a list for queue operations
         currentSlice = deque()
@@ -150,12 +145,8 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
         baseIndex = 0
         #Finding the expected shape of the transform results
 
-        #trying something new, dropping a couple of samples to match matlab (1 in each dimension)
-        """if (videoInput.shape[2] - 1) % 2 == 0:
-            transformShape = (videoInput.shape[1] - 1, (videoInput.shape[2] - 1)//2 + 1)
-        else:
-            #+1 for the real transform correction, -1 to drop a sample based on MATLAB
-            transformShape = (videoInput.shape[1] - 1, (videoInput.shape[2]+1-1)//2)"""
+
+
         transformShape = (videoInput.shape[1] - 1, videoInput.shape[2] - 1)
         totalDifferencesShape = (framesPerSlice, transformShape[0], transformShape[1])
         #Preparing the destination of the frame differences
@@ -187,9 +178,11 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
                 difference = head - currentSlice[sliceFrameIndex]
                 normalFrame = thr.array(size, dtype=numpy.float64)
                 fftNorm(normalFrame, difference)
-                print(normalFrame.shape)
 
                 totalDifferences[relativeDifference, :, :] += normalFrame.get()
+
+                # TODO - Need to make this ^^^ run on the GPU
+                # allocate list of empty buffers, add into?
 
                 numDifferences[relativeDifference] += 1
                 relativeDifference += 1
@@ -230,7 +223,7 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
 
 
 if __name__ == '__main__':
-    if len(sys.argv) not in [2, 3]:
+    if len(sys.argv) != 2:
         print('Invalid args')
         exit()
 

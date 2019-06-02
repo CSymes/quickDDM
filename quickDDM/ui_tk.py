@@ -9,21 +9,21 @@ Creates a UI to interface with the program, using the tkinter framework
 
 HAS_BACKEND_GPU = False
 
-from curveFitterBasic import fitCorrelationsToFunction, generateFittedCurves
-from curveFitterBasic import FITTING_FUNCTIONS
-from basicMain import sequentialChunkerMain
+from curveFitting import fitCorrelationsToFunction, generateFittedCurves
+from curveFitting import FITTING_FUNCTIONS
+from processingCore import sequentialChunkerMain
 try: # Attempt to load GPU backend, and check if hardware/drivers are present
-    from gpuMain import sequentialGPUChunker
+    from gpuCore import sequentialGPUChunker
 
     try:
         from pyopencl._cl import LogicError
         import reikna
         reikna.cluda.ocl_api().Thread.create()
 
-        HAS_BACKEND_GPU = True
+        HAS_BACKEND_GPU = True # If we can get here, OpenCL should work fine.
     except LogicError:
         print('[Warning] Either no GPU hardware is present, '
-              'or the OpenCL libraries are not installed. '
+              'or the OpenCL drivers are not installed. '
               'Disabling GPU backend.')
 except ModuleNotFoundError:
     print('[Warning] Please install PyOpenCL & Reikna to use the GPU backend')
@@ -45,6 +45,7 @@ import cv2
 import numpy
 import re
 import random
+from time import time
 
 import concurrent.futures as futures
 
@@ -230,6 +231,7 @@ class LoadFrame(Frame):
         status, frame = self.videoFile.read()
 
         if status:
+            # TODO this falls down for videos that aren't 512px^2
             thumSize = self.img_preview.winfo_width()
             pimg = Image.fromarray(frame) # convert from OpenCV to PIL
             pimg.thumbnail((thumSize, thumSize)) # downsize image
@@ -507,8 +509,12 @@ class ProcessingFrame(Frame):
         progress.setText('Processing')
         progress.cycle()
 
+        a = time()
         self.correlation = sequentialChunkerMain(fname, deltas,
             progress=progress, abortFlag=threadKiller)
+        b = time()
+
+        print(f'total processing time: {b-a:.3f}s')
 
         if self.correlation is None: return 'thread aborted'
 
@@ -528,8 +534,12 @@ class ProcessingFrame(Frame):
         progress.setText('Processing')
         progress.cycle()
 
+        a = time()
         self.correlation = sequentialGPUChunker(fname, deltas,
             progress=progress, abortFlag=threadKiller)
+        b = time()
+
+        print(f'total processing time: {b-a:.3f}s')
 
         if self.correlation is None: return 'thread aborted'
 
@@ -543,6 +553,8 @@ class ProcessingFrame(Frame):
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self):
+        import code; code.interact(local=dict(globals(), **locals()))
+
         if self.correlation is None:
             return
 
@@ -687,7 +699,7 @@ class ProcessingFrame(Frame):
 
     """
     Generates curve fitting for the current data
-    Options for `model` are as in curveFitterBasic.py
+    Options for `model` are as in curveFitting.py
     """
     def makeFits(self, model):
         print(f'Fitting with curve fitting model "{model}"')
@@ -912,7 +924,7 @@ def center(win):
     # y = ((wh//2) - (h//2))
 
     x = w // 4
-    y = h // 4
+    y = h // 4 # TODO fix positioning
 
 
     win.geometry(f'+{x}+{y}') # And set them
