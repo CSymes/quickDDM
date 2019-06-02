@@ -224,6 +224,7 @@ class LoadFrame(Frame):
         # ...behold, the new has come!
         pframe = ProcessingFrame(win, backend, filename, fps, frames, spacing, scaling, exp)
         pframe.grid()
+        center(win) # Update window dimensions/placement
 
     """Rips the frame at `index` out of the chosen video and shows in the preview pane"""
     def setPreview(self, index):
@@ -435,7 +436,6 @@ class ProcessingFrame(Frame):
         super().__init__(parent, padding=WINDOW_PADDING)
 
         self.populate()
-        center(parent) # Update window dimensions/placement
 
         self.correlation = None
         self.plotCurves = []
@@ -553,8 +553,6 @@ class ProcessingFrame(Frame):
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self):
-        import code; code.interact(local=dict(globals(), **locals()))
-
         if self.correlation is None:
             return
 
@@ -589,12 +587,13 @@ class ProcessingFrame(Frame):
                 ROWS = len(self.fitParams[0]) - 1
                 # Drop first row (doesn't get fitted)
 
+                ind = 3
+                numParams = len(self.fitParams[0][1:][0])
+
                 fitParamsOut = numpy.zeros((ROWS, COLUMNS), dtype=numpy.float64)
                 fitParamsOut[:, 0] = range(1, len(self.fitParams[0])) # q pixels
                 fitParamsOut[:, 1] = self.fitParams[1] # actual q indices
-                fitParamsOut[:, 3:6] = self.fitParams[0][1:] # fitting params
-
-                import code; code.interact(local=dict(globals(), **locals()))
+                fitParamsOut[:, ind:(ind+numParams)] = self.fitParams[0][1:] # fitting params
 
                 fnParams = re.sub(r'\.csv$', '', fn) + '_fitting_params.csv'
                 numpy.savetxt(fnParams, fitParamsOut, delimiter=' ')
@@ -912,23 +911,18 @@ def center(win):
 
 
     win.geometry(f'+{ww*2}+{wh*2}') # move offscreen before rendering
-    win.update() # generate geometry before moving window
+    win.update() # generate geometry before moving window back
 
 
     # Current window dimensions
     w = win.winfo_width()
     h = win.winfo_height()
 
-    # and move back onscreen at correct position
-    # x = ((ww//2) - (w//4))
-    # y = ((wh//2) - (h//2))
+    # Find correct position
+    x = ((ww//2) - (w//2))
+    y = ((wh//2) - (h//2))
 
-    x = w // 4
-    y = h // 4 # TODO fix positioning
-
-
-    win.geometry(f'+{x}+{y}') # And set them
-    # win.geometry(f'{w}x{h}+{x}+{y}') # W/H auto-calculated - don't need to force them
+    win.geometry(f'+{x}+{y}') # Set position
 
 if __name__ == '__main__':
     # Create a new Tk framework instance / window
@@ -940,12 +934,6 @@ if __name__ == '__main__':
     center(window) # set window location and generate geometry
     window.winfo_toplevel().title('quickDDM')
     window.resizable(False, False) # It's not really super responsive
-
-    # TODO delete lol
-    loader.address.set('../tests/data/10frames.avi')
-    for c in loader.winfo_children():
-        c.event_generate('<FocusOut>', when='tail')
-    # TODO
 
     with threadPool: # Ensure worker pools get shutdown
         global threadKiller
