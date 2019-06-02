@@ -386,6 +386,9 @@ class LoadFrame(Frame):
                 self.backendChoice.set(BACKEND_CPU)
                 procGPU['state'] = 'disabled'
 
+            # TODO algorithms don't support custom spacing as yet.
+            timeExp['state'] = 'disabled'
+
             procCPU['width'] = len(timeLinear['text']) # Align radio buttons
             procCPU['anchor'] = W
             timeLinear['width'] = len(timeLinear['text'])
