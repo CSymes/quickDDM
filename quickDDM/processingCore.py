@@ -138,4 +138,4 @@ def sequentialChunkerMain(videoPath, spacings, outputPath = None, RAMGB = 1, pro
     return outputMatrix
 
 if __name__ == '__main__':
-    sequentialChunkerMain('C:\\Users\\Lionel\\Documents\\GitHub\\quickDDM\\tests\\data\\10frames.avi', None)
+    sequentialChunkerMain('..\\tests\\data\\10frames.avi', None)

@@ -55,16 +55,18 @@ def readVideo(file):
         else:
             #negative slice index drops the last n elements
             videoArray = videoArray[:,:,leftDrop:-rightDrop]
-    
     return videoArray
 
-    
 """
 file: file path to read from, as string
 RETURN: framerate as single float
 """
 def readFramerate(file):
     videoFile = cv2.VideoCapture(file)
+
+    if not videoFile.isOpened():
+        raise OSError("Malformed video file (" + file + ")")
+
     # Successfully opened the video
     fps = int(videoFile.get(cv2.CAP_PROP_FPS))
     return fps

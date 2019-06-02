@@ -13,8 +13,6 @@ from reikna.transformations import norm_const, div_const
 
 from quickDDM.readVideo import readVideo
 from quickDDM.twoDFourier import twoDFourierUnnormalized, castToReal
-from quickDDM.calculateQCurves import calculateQCurves
-from quickDDM.calculateCorrelation import calculateCorrelation
 
 import numpy, numpy.testing
 import unittest
@@ -66,7 +64,7 @@ class GPUTestCases(unittest.TestCase):
         ftframe = numpy.asarray([self.firstDiff])
         cpu = castToReal(twoDFourierUnnormalized(ftframe)[0])
 
-        numpy.testing.assert_allclose(local, cpu, rtol=1e-3)
+        numpy.testing.assert_allclose(local, cpu)
 
     def testFourierWithNormalisationMatchesMatlab(self):
         res = self.thread.array(self.frames[0].shape, dtype=numpy.float64)
@@ -79,5 +77,4 @@ class GPUTestCases(unittest.TestCase):
         with open('tests/data/fft_matlab_f2-f1.csv', 'rb') as mf:
             m = numpy.loadtxt(mf, delimiter=',')
 
-            # Matlab matches much closer than Numpy by the looks of it
-            numpy.testing.assert_allclose(local, m, rtol=1e-8)
+            numpy.testing.assert_allclose(local, m)

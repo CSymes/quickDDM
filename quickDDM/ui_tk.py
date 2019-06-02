@@ -44,6 +44,7 @@ import cv2
 import numpy
 import re
 import random
+from time import time
 
 import concurrent.futures as futures
 
@@ -493,7 +494,11 @@ class ProcessingFrame(Frame):
         progress.setText('Processing')
         progress.cycle()
 
+        a = time()
         self.correlation = sequentialChunkerMain(fname, deltas, progress=progress, abortFlag=threadKiller)
+        b = time()
+
+        print(f'total processing time: {b-a:.3f}s')
 
         if self.correlation is None: return 'thread aborted'
 
@@ -510,7 +515,11 @@ class ProcessingFrame(Frame):
         progress.setText('Processing')
         progress.cycle()
 
+        a = time()
         self.correlation = sequentialGPUChunker(fname, deltas, progress=progress, abortFlag=threadKiller)
+        b = time()
+
+        print(f'total processing time: {b-a:.3f}s')
 
         if self.correlation is None: return 'thread aborted'
 
@@ -521,6 +530,8 @@ class ProcessingFrame(Frame):
 
     """Saves all current data to disk in a CSV (via a file selector)"""
     def saveAllData(self):
+        import code; code.interact(local=dict(globals(), **locals()))
+
         if self.correlation is None:
             return
 

@@ -6,7 +6,7 @@ Series of tests for the video reading/frame splitting functionality
 @author: Cary
 """
 
-from quickDDM.readVideo import readVideo
+from quickDDM.readVideo import readVideo, readFramerate
 import os, sys, shutil
 import numpy
 import unittest
@@ -53,3 +53,8 @@ class ReadVideoTestCases(unittest.TestCase):
         with self.assertRaises(OSError):
             print('\nExpecting ioctl error... ', end='')
             frames = readVideo('tests/data/empty.avi')
+
+    def testReadFramerate(self):
+        fps = readFramerate('tests/data/black.avi')
+
+        self.assertEqual(fps, 100)

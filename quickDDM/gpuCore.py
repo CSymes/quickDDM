@@ -136,7 +136,8 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
 
     # For each diagonal section
     for sliceSpacing in range(0, numSpacingSets):
-        if progress is not None: progress.setText(f'Working on Slice {sliceSpacing+1}/{numSpacingSets}')
+        if progress is not None:
+            progress.setText(f'Working on Slice {sliceSpacing+1}/{numSpacingSets}')
 
         #A double ended queue, more efficient than a list for queue operations
         currentSlice = deque()
@@ -144,12 +145,8 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
         baseIndex = 0
         #Finding the expected shape of the transform results
 
-        #trying something new, dropping a couple of samples to match matlab (1 in each dimension)
-        """if (videoInput.shape[2] - 1) % 2 == 0:
-            transformShape = (videoInput.shape[1] - 1, (videoInput.shape[2] - 1)//2 + 1)
-        else:
-            #+1 for the real transform correction, -1 to drop a sample based on MATLAB
-            transformShape = (videoInput.shape[1] - 1, (videoInput.shape[2]+1-1)//2)"""
+
+
         transformShape = (videoInput.shape[1] - 1, videoInput.shape[2] - 1)
         totalDifferencesShape = (framesPerSlice, transformShape[0], transformShape[1])
         #Preparing the destination of the frame differences
@@ -226,7 +223,7 @@ def sequentialGPUChunker(filename, spacings, RAMGB = 4, progress=None, abortFlag
 
 
 if __name__ == '__main__':
-    if len(sys.argv) not in [2, 3]:
+    if len(sys.argv) != 2:
         print('Invalid args')
         exit()
 
