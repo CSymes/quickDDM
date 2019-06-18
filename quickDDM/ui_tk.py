@@ -9,11 +9,11 @@ Creates a UI to interface with the program, using the tkinter framework
 
 HAS_BACKEND_GPU = False
 
-from curveFitting import fitCorrelationsToFunction, generateFittedCurves
-from curveFitting import FITTING_FUNCTIONS
-from processingCore import sequentialChunkerMain
+from .curveFitting import fitCorrelationsToFunction, generateFittedCurves
+from .curveFitting import FITTING_FUNCTIONS
+from .processingCore import sequentialChunkerMain
 try: # Attempt to load GPU backend, and check if hardware/drivers are present
-    from gpuCore import sequentialGPUChunker
+    from .gpuCore import sequentialGPUChunker
 
     try:
         from pyopencl._cl import LogicError

@@ -31,10 +31,19 @@ from in the source directory, assuming pip is already installed.
 
 ## Running
 
-To launch the UI from the command line, navigate to the 'quickDDM' directory
-within the source directory and execute `python ui_tk.py`. Alternativly,
-download and run a binary build from [Releases](https://github.com/CSymes/quickDDM/releases)
+To launch the UI from the command line, navigate to the project directory
+and execute `python -m quickDDM.ui_tk`.  
+Alternatively, download and run a binary build from
+[Releases](https://github.com/CSymes/quickDDM/releases)
 or a build artifact from [Azure](dev.azure.com/s3550167/quickDDM/_build).
+
+## Testing
+
+There are a series of tests in the `tests` directory.
+They can be run by calling
+`python -m unittest discover tests [-v]`.  
+Individual tests may be run as such:
+(e.g.) `python -m unittest tests.testFourierTransforms`
 
 ## Building
 
@@ -55,6 +64,6 @@ The flow of "sequentialChunkerMain" in "processingCore.py" and
 "sequentialGPUChunker" in "gpuCore.py" in paricular are
 closely based on the GPU memory management technique detailed therein.
 
-Our understanding of the core process was heaviy informed by:  
+Our understanding of the core process was heavily informed by:  
 L. G. Wilson et al., "Differential Dynamic Microscopy of Bacterial Motility,"
 Physical Review Letters, vol. 106, no. 1, p. 4, Jan 2011.
