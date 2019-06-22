@@ -51,7 +51,7 @@ class ReadVideoTestCases(unittest.TestCase):
 
     def testEmptyVideoFails(self):
         with self.assertRaises(OSError):
-            print('\nExpecting ioctl error... ', end='')
+            print('\nExpecting IO error... ', end='')
             frames = readVideo('tests/data/empty.avi')
 
     def testReadFramerate(self):

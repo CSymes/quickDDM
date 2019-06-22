@@ -111,14 +111,13 @@ steps:
 - script: |
     pip install pypiwin32 pyinstaller
     python publish.py
-    mv ./dist/ui_tk.exe ./quickDDM.exe
   displayName: 'Create Windows Build'
   condition: eq( variables.platform, 'windows' )
 
 - task: CopyFiles@2
   inputs:
-    sourceFolder: '.'
-    contents: '*.exe'
+    sourceFolder: 'dist'
+    contents: '**/*'
     targetFolder: $(Build.ArtifactStagingDirectory)
   displayName: 'Stage artifact'
   condition: eq( variables.platform, 'windows' )
@@ -127,6 +126,6 @@ steps:
 - task: PublishBuildArtifacts@1
   inputs:
     pathtoPublish: $(Build.ArtifactStagingDirectory)
-    artifactName: WindowsArtifacts
+    artifactName: WindowsBuild
   displayName: 'Publish artifact'
   condition: eq( variables.platform, 'windows' )

@@ -18,9 +18,9 @@ from reikna.transformations import norm_const, div_const
 
 from collections import deque
 
-from .readVideo import readVideo, readFramerate
-from .calculateQCurves import calculateWithCalls
-from .calculateCorrelation import calculateCorrelation
+from quickDDM.readVideo import readVideo, readFramerate
+from quickDDM.calculateQCurves import calculateWithCalls
+from quickDDM.calculateCorrelation import calculateCorrelation
 
 
 
