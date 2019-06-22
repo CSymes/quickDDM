@@ -28,18 +28,3 @@ if __name__ == '__main__':
              ]
 
     PyInstaller.__main__.run(params)
-
-
-
-    # The compiled folder is pretty messy, so create a shortcut next to it
-    # pointing at the executable inside.
-    # https://stackoverflow.com/questions/26986470/create-shortcut-files-in-windows-7-using-python
-
-    spath = 'dist/quickDDM.lnk'
-    target = './dist/quickDDM/quickDDM.exe'
-
-    shell = win32com.client.Dispatch("WScript.Shell")
-    shortcut = shell.CreateShortCut(spath)
-    shortcut.Targetpath = abspath(target)
-    shortcut.save()
-
