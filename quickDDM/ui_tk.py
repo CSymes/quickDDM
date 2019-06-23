@@ -9,11 +9,11 @@ Creates a UI to interface with the program, using the tkinter framework
 
 HAS_BACKEND_GPU = False
 
-from curveFitting import fitCorrelationsToFunction, generateFittedCurves
-from curveFitting import FITTING_FUNCTIONS
-from processingCore import sequentialChunkerMain
+from quickDDM.curveFitting import fitCorrelationsToFunction, generateFittedCurves
+from quickDDM.curveFitting import FITTING_FUNCTIONS
+from quickDDM.processingCore import sequentialChunkerMain
 try: # Attempt to load GPU backend, and check if hardware/drivers are present
-    from gpuCore import sequentialGPUChunker
+    from quickDDM.gpuCore import sequentialGPUChunker
 
     try:
         from pyopencl._cl import LogicError
@@ -924,7 +924,7 @@ def center(win):
 
     win.geometry(f'+{x}+{y}') # Set position
 
-if __name__ == '__main__':
+def launch():
     # Create a new Tk framework instance / window
     window = Tk()
 
@@ -970,3 +970,6 @@ if __name__ == '__main__':
 
 # TODO Think about splitting this into multiple files
 #      Maybe have a UI subpackage instead of a UI module, aye
+
+if __name__ == '__main__':
+    launch()
