@@ -59,14 +59,20 @@ Parameters:
     thread: Reikna CLUDA thread object
     kernel: compiled GPU kernel - assumed to have compiled signature (out, in)
     frame: data to operate on
+    outType: a numpy data type to store the resulting data as
 Returns:
     On-GPU buffer containing the results (same dimensions as `frame`)
 """
-def runKernelOperation(thread, kernel, frame):
-    frame = numpy.ascontiguousarray(frame).astype(numpy.complex128)
+def runKernelOperation(thread, kernel, frame, outType=numpy.complex128):
+    if type(frame) is reikna.cluda.ocl.Array:
+        # frame is already on the GPU
+        devFr = frame
+    else:
+        # It's in main memory - need to cast and send to VRAM
+        frame = numpy.ascontiguousarray(frame).astype(numpy.complex128)
+        devFr = thread.to_device(frame) # Send frame to device
 
-    devFr = thread.to_device(frame) # Send frame to device
-    fBuffer = thread.array(frame.shape, dtype=numpy.complex128)
+    fBuffer = thread.array(frame.shape, dtype=outType)
 
     kernel(fBuffer, devFr)
     return fBuffer
