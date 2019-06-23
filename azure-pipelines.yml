@@ -107,18 +107,18 @@ steps:
 
 # Creates a .exe build of the whole program
 # Only runs on the Windows build
-
+# Also creates a .bat shortcut into the build folder, since it's a bit messy
 - script: |
     pip install pypiwin32 pyinstaller
     python publish.py
-    mv ./dist/ui_tk.exe ./quickDDM.exe
+    echo '@start "" "quickDDM/quickDDM.exe"' > dist/quickDDM.bat
   displayName: 'Create Windows Build'
   condition: eq( variables.platform, 'windows' )
 
 - task: CopyFiles@2
   inputs:
-    sourceFolder: '.'
-    contents: '*.exe'
+    sourceFolder: 'dist'
+    contents: '**/*'
     targetFolder: $(Build.ArtifactStagingDirectory)
   displayName: 'Stage artifact'
   condition: eq( variables.platform, 'windows' )
@@ -127,6 +127,6 @@ steps:
 - task: PublishBuildArtifacts@1
   inputs:
     pathtoPublish: $(Build.ArtifactStagingDirectory)
-    artifactName: WindowsArtifacts
+    artifactName: WindowsBuild
   displayName: 'Publish artifact'
   condition: eq( variables.platform, 'windows' )

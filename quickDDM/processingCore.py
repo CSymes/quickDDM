@@ -10,10 +10,10 @@ of the process in turn, chaining them together.
 
 import sys
 import numpy as np
-import readVideo as rV
-import twoDFourier as tDF
-import calculateQCurves as cQC
-import calculateCorrelation as cC
+import quickDDM.readVideo as rV
+import quickDDM.twoDFourier as tDF
+import quickDDM.calculateQCurves as cQC
+import quickDDM.calculateCorrelation as cC
 from collections import deque
 
 """
