@@ -7,7 +7,7 @@ Mako==1.0.10
 MarkupSafe==1.1.1
 matplotlib==3.0.3
 numpy==1.16.2
-opencv-python==4.0.0.21
+opencv-python==4.2.0.32
 Pillow==6.0.0
 pybind11==2.2.4
 pyopencl==2018.2.5
